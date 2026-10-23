@@ -13,26 +13,92 @@ if (!ACCOUNT_ID || !API_TOKEN || !AZURE_KEY || !AZURE_REGION) {
   process.exit(1);
 }
 
-const guion = {
-  title: "El misterio de Punto Nemo",
-  scenes: [
-    { id: "1", tag: "PUNTO NEMO", text: "En medio del océano Pacífico existe el punto más remoto e inaccesible de todo el planeta Tierra.", imagePrompt: "satellite view of Earth focusing on endless vast empty deep blue Pacific Ocean, solitary coordinate point glowing, photorealistic 8k, vertical 9:16", imageFile: "ia_escena_1.jpg" },
-    { id: "2", tag: "AISLAMIENTO", text: "La costa más cercana está a casi tres mil kilómetros. Si estuvieras ahí, los humanos más próximos estarían en el espacio.", imagePrompt: "astronaut looking down at empty blue ocean planet from window of space station cupola, hyperrealistic, cinematic lighting, vertical 9:16", imageFile: "ia_escena_2.jpg" },
-    { id: "3", tag: "DESIERTO", text: "Debido a las corrientes oceánicas circulares, aquí casi no hay nutrientes. Es un desierto biológico donde apenas existe vida.", imagePrompt: "underwater shot of deep crystal clear empty blue ocean void, sun rays fading into dark abyss, complete silence, cinematic vertical 9:16", imageFile: "ia_escena_3.jpg" },
-    { id: "4", tag: "BASURERO", text: "Por esta soledad absoluta, las agencias espaciales de todo el mundo lo eligieron como el basurero definitivo del cosmos.", imagePrompt: "dramatic night shot of old satellites and rocket boosters in low earth orbit, fiery trail, atmospheric reentry beginning, vertical 9:16", imageFile: "ia_escena_4.jpg" },
-    { id: "5", tag: "FUEGO", text: "Cuando una estación espacial llega al final de su vida, la envían deliberadamente a estrellarse contra esta zona.", imagePrompt: "giant spacecraft burning and breaking apart in incandescent orange flames through night sky, cinematic sparks, photorealistic vertical 9:16", imageFile: "ia_escena_5.jpg" },
-    { id: "6", tag: "IMPACTO", text: "Toneladas de metal y titanio caen a miles de kilómetros por hora provocando un impacto colosal sobre el agua.", imagePrompt: "massive glowing debris crash into dark sea surface causing giant explosion of water and steam, night dramatic lighting, vertical 9:16", imageFile: "ia_escena_6.jpg" },
-    { id: "7", tag: "MIR", text: "La legendaria estación espacial soviética Mir descansa ahora mismo a más de cuatro mil metros de profundidad.", imagePrompt: "wreckage of Soviet Mir space station resting on dark seabed, covered in thin marine silt, underwater ROV spotlight illuminating titanium hull, vertical 9:16", imageFile: "ia_escena_7.jpg" },
-    { id: "8", tag: "NAVES", text: "En este lecho marino reposan más de doscientos sesenta restos de naves, satélites y módulos de carga espacial.", imagePrompt: "underwater graveyard of space technology on abyssal ocean floor, twisted solar panels, titanium tanks half buried in sand, vertical 9:16", imageFile: "ia_escena_8.jpg" },
-    { id: "9", tag: "ISS", text: "Y muy pronto, la propia Estación Espacial Internacional será desorbitada para terminar sepultada bajo estas mismas aguas.", imagePrompt: "International Space Station beginning controlled descent towards earth ocean, golden hour earth glow, atmospheric entry trail, vertical 9:16", imageFile: "ia_escena_9.jpg" },
-    { id: "10", tag: "BLOOP", text: "Pero el metal espacial no es lo único extraño. En 1997, micrófonos militares submarinos captaron un sonido perturbador aquí.", imagePrompt: "vintage naval hydrophone sonar screen displaying massive anomalous ultra-low acoustic soundwave frequency, glowing green phosphor, vertical 9:16", imageFile: "ia_escena_10.jpg" },
-    { id: "11", tag: "SONIDO", text: "Bautizado como El Bloop, fue tan potente que se escuchó a más de cinco mil kilómetros de distancia a través del océano.", imagePrompt: "mysterious colossal dark silhouette moving through abyssal black deep sea waters, subtle bioluminescent glow, eerie atmosphere, vertical 9:16", imageFile: "ia_escena_11.jpg" },
-    { id: "12", tag: "ICEBERG", text: "La ciencia determinó años después que fue la violenta fractura de un enorme iceberg en la Antártida.", imagePrompt: "colossal antarctic glacier iceberg violently cracking and collapsing into dark polar ocean waters, misty frozen atmosphere, vertical 9:16", imageFile: "ia_escena_12.jpg" },
-    { id: "13", tag: "COINCIDENCIA", text: "Sin embargo, décadas antes de descubrir Punto Nemo, el escritor Lovecraft ubicó exactamente en estas coordenadas...", imagePrompt: "aged 1920s vintage nautical map on wooden desk, brass compass pointing to handwritten enigmatic coordinates, candlelight, vertical 9:16", imageFile: "ia_escena_13.jpg" },
-    { id: "14", tag: "C'THULHU", text: "...a R'lyeh, la mítica ciudad submarina donde una entidad cósmica ancestral duerme bajo el mar.", imagePrompt: "ancient cyclopean submerged stone architecture covered in sea flora, towering monolithic sunken ruins, eerie deep sea green lighting, vertical 9:16", imageFile: "ia_escena_14.jpg" },
-    { id: "15", tag: "FINAL", text: "El lugar más solitario del mundo, donde la tecnología del hombre duerme en el olvido del abismo.", imagePrompt: "lone futuristic exploration ship sailing on calm pitch-black ocean under dense starry sky, powerful searchlights illuminating ocean depth, vertical 9:16", imageFile: "ia_escena_15.jpg" }
-  ],
-};
+const guion = [
+  {
+    id: "1",
+    tag: "ABISMO",
+    text: "¿Qué encontraron los científicos al perforar casi doce kilómetros bajo la tierra, en un lugar donde la roca parecía guardar un secreto imposible?",
+    imagePrompt: "A Soviet-era drilling rig descending into the Kola Superdeep Borehole, massive industrial machinery surrounded by dark northern wilderness, aerial wide shot from above, cold volumetric light cutting through mist, ominous blue and steel gray palette, hyperrealistic, cinematic, 35mm film, shallow depth of field, ultra detailed, 8k, vertical 9:16",
+    imageFile: "ia_escena_1.jpg"
+  },
+  {
+    id: "2",
+    tag: "MISTERIO",
+    text: "En la península de Kola, un equipo soviético inició una carrera contra la naturaleza para alcanzar el punto más profundo jamás excavado por seres humanos.",
+    imagePrompt: "Soviet scientists and engineers studying blueprints beside a towering drilling platform in northern Russia, snow-covered landscape and rugged equipment surrounding them, medium shot at eye level, pale winter sunlight with dramatic rim light, desaturated blue and amber palette, hyperrealistic, cinematic, 35mm film, shallow depth of field, ultra detailed, 8k, vertical 9:16",
+    imageFile: "ia_escena_2.jpg"
+  },
+  {
+    id: "3",
+    tag: "DESAFÍO",
+    text: "El objetivo no era encontrar petróleo ni construir una mina. Querían estudiar la corteza terrestre y descubrir cómo era realmente el planeta por dentro.",
+    imagePrompt: "Determined Soviet geologist examining geological samples beside a deep drilling shaft, laboratory containers and metallic instruments visible in a remote research station, close-up three-quarter angle, focused tungsten light mixed with icy window light, earthy brown and cold cyan palette, hyperrealistic, cinematic, 35mm film, shallow depth of field, ultra detailed, 8k, vertical 9:16",
+    imageFile: "ia_escena_3.jpg"
+  },
+  {
+    id: "4",
+    tag: "PROFUNDIDAD",
+    text: "La perforación comenzó en mil novecientos setenta y continuó durante décadas. Cada metro nuevo exigía herramientas más resistentes y una paciencia extraordinaria.",
+    imagePrompt: "Long drill pipe rotating deep inside an enormous industrial borehole, engineers monitoring gauges and machinery in a Soviet research facility, low angle shot looking upward through the steel structure, harsh chiaroscuro and glowing warning lamps, graphite black and rusty orange palette, hyperrealistic, cinematic, 35mm film, shallow depth of field, ultra detailed, 8k, vertical 9:16",
+    imageFile: "ia_escena_4.jpg"
+  },
+  {
+    id: "5",
+    tag: "GIRO",
+    text: "Pero cuanto más descendían, más extraño se volvía el subsuelo. La temperatura aumentaba mucho más de lo esperado y deformaba las brocas.",
+    imagePrompt: "Glowing drill bit emerging from fractured rock deep underground, molten heat shimmering around the metal and engineers reacting in the background, extreme close-up from a low angle, intense orange volumetric light surrounded by deep shadows, fiery amber and charcoal palette, hyperrealistic, cinematic, 35mm film, shallow depth of field, ultra detailed, 8k, vertical 9:16",
+    imageFile: "ia_escena_5.jpg"
+  },
+  {
+    id: "6",
+    tag: "SORPRESA",
+    text: "Los científicos también descubrieron agua atrapada a gran profundidad, liberada por minerales que la habían conservado durante millones de años.",
+    imagePrompt: "Scientists collecting water droplets from fractured deep rock inside a drilling laboratory, mineral crystals glistening around the sample and tools carefully arranged, macro close-up with a slight side angle, luminous blue rim light and subtle chiaroscuro, deep cobalt and silver palette, hyperrealistic, cinematic, 35mm film, shallow depth of field, ultra detailed, 8k, vertical 9:16",
+    imageFile: "ia_escena_6.jpg"
+  },
+  {
+    id: "7",
+    tag: "HALLAZGO",
+    text: "También aparecieron diminutos fósiles de organismos antiguos en rocas que parecían demasiado profundas para conservar señales de vida.",
+    imagePrompt: "Ancient microscopic fossil patterns revealed inside a polished deep-earth rock sample, gloved scientist holding the specimen under magnification equipment, dramatic close-up from an oblique angle, focused laboratory light with cool rim illumination, dark emerald and golden mineral palette, hyperrealistic, cinematic, 35mm film, shallow depth of field, ultra detailed, 8k, vertical 9:16",
+    imageFile: "ia_escena_7.jpg"
+  },
+  {
+    id: "8",
+    tag: "ALARMA",
+    text: "El plan original esperaba una corteza dividida en capas simples. La realidad fue distinta: las rocas estaban fracturadas, mezcladas y llenas de sorpresas.",
+    imagePrompt: "Cross-section of complex fractured continental crust revealed beneath a drilling operation, layered rocks twisted and interlocked around the borehole, cinematic cutaway wide shot, dramatic volumetric beams piercing underground darkness, ochre, copper and midnight blue palette, hyperrealistic, cinematic, 35mm film, shallow depth of field, ultra detailed, 8k, vertical 9:16",
+    imageFile: "ia_escena_8.jpg"
+  },
+  {
+    id: "9",
+    tag: "TENSIÓN",
+    text: "A más de doce kilómetros, la presión y el calor convirtieron cada avance en una batalla. El pozo podía cerrarse sobre la herramienta en cualquier momento.",
+    imagePrompt: "Massive underground drilling assembly bending under extreme pressure inside a narrow borehole, sparks and fractured stone surrounding the machinery, dynamic low angle close-up, pulsing red industrial light with strong rim highlights, oppressive black, crimson and bronze palette, hyperrealistic, cinematic, 35mm film, shallow depth of field, ultra detailed, 8k, vertical 9:16",
+    imageFile: "ia_escena_9.jpg"
+  },
+  {
+    id: "10",
+    tag: "LÍMITE",
+    text: "En mil novecientos ochenta y nueve alcanzaron doce kilómetros y doscientos sesenta y dos metros, una distancia enorme, aunque pequeña comparada con el tamaño de la Tierra.",
+    imagePrompt: "Soviet drilling crew standing beside the record-setting Kola borehole platform, enormous machinery fading into a snowy horizon, heroic wide shot from a low angle, golden sunset breaking through storm clouds with dramatic rim light, steel blue and warm copper palette, hyperrealistic, cinematic, 35mm film, shallow depth of field, ultra detailed, 8k, vertical 9:16",
+    imageFile: "ia_escena_10.jpg"
+  },
+  {
+    id: "11",
+    tag: "CLÍMAX",
+    text: "La gran revelación fue que la frontera entre capas no estaba donde los científicos esperaban. El interior terrestre resultó mucho más complejo y vivo.",
+    imagePrompt: "Scientists staring into a deep illuminated borehole while a symbolic cross-section of Earth reveals intricate living geological layers beneath them, dramatic low angle composition, powerful volumetric light rising from the abyss, deep blue, molten orange and obsidian palette, hyperrealistic, cinematic, 35mm film, shallow depth of field, ultra detailed, 8k, vertical 9:16",
+    imageFile: "ia_escena_11.jpg"
+  },
+  {
+    id: "12",
+    tag: "REFLEXIÓN",
+    text: "El pozo de Kola demuestra que conocemos mejor otros mundos que nuestro propio subsuelo. Si te sorprendió, guárdalo y sígueme para descubrir más misterios reales.",
+    imagePrompt: "Abandoned Kola Superdeep Borehole facility under northern twilight, silent rusted machinery surrounded by snow and vast wilderness, distant cinematic wide shot at eye level, fading blue hour light with subtle golden rim glow, melancholic steel blue and amber palette, hyperrealistic, cinematic, 35mm film, shallow depth of field, ultra detailed, 8k, vertical 9:16",
+    imageFile: "ia_escena_12.jpg"
+  }
+];
 
 async function generarImagenCloudflare(prompt, outputPath) {
   const response = await fetch(
