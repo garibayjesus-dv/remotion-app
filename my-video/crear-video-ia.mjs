@@ -82,14 +82,16 @@ async function main() {
     await generarVozAzure(scene.text, audioPath);
 
     const durationSec = getMP3Duration(fs.readFileSync(audioPath)) / 1000;
-    const totalFrames = Math.ceil(durationSec * 30) + 8; // Margen para corte natural
+    const totalFrames = Math.ceil(durationSec * 30) + 8;
 
+    // AQUI ESTA LA CORRECCIÓN EXACTA PARA QUE REMOTION NO FALLE
     processedScenes.push({ 
-  ...scene, 
-  image: scene.imageFile, 
-  audioFile: `audio_scene_${i + 1}.mp3`, 
-  durationInFrames: totalFrames 
-});
+      id: scene.id,
+      tag: scene.tag,
+      image: scene.imageFile, 
+      audioFile: `audio_scene_${i + 1}.mp3`, 
+      durationInFrames: totalFrames 
+    });
   }
 
   fs.writeFileSync("./guion_sincronizado.json", JSON.stringify({ scenes: processedScenes }, null, 2));
