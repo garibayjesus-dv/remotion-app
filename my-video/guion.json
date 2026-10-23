@@ -1,0 +1,40 @@
+{
+  "title": "La revolución de la energía de fusión",
+  "scenes": [
+    {
+      "id": "escena_1",
+      "tag": "EL DESCUBRIMIENTO",
+      "text": "Científicos acaban de encender un sol artificial y lo que ocurrió superó cualquier predicción.",
+      "durationInFrames": 300,
+      "image": "img1.jpg"
+    },
+    {
+      "id": "escena_2",
+      "tag": "EL EXPERIMENTO",
+      "text": "Durante décadas el mayor reto de la humanidad fue contener plasma a más de cien millones de grados.",
+      "durationInFrames": 390,
+      "image": "img2.jpg"
+    },
+    {
+      "id": "escena_3",
+      "tag": "EL RESULTADO",
+      "text": "El reactor generó más energía de la que consumió, abriendo las puertas a la electricidad infinita y sin contaminación.",
+      "durationInFrames": 420,
+      "image": "img3.jpg"
+    },
+    {
+      "id": "escena_4",
+      "tag": "EL IMPACTO",
+      "text": "Las primeras plantas comerciales podrían estar conectadas a la red mucho antes del año 2035.",
+      "durationInFrames": 360,
+      "image": "img4.jpg"
+    },
+    {
+      "id": "escena_5",
+      "tag": "CONCLUSIÓN",
+      "text": "¿Crees que este avance resolverá la crisis climática a tiempo? Déjanos tu opinión en los comentarios.",
+      "durationInFrames": 330,
+      "image": "img5.jpg"
+    }
+  ]
+}

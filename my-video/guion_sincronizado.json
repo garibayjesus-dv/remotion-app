@@ -1,0 +1,74 @@
+{
+  "scenes": [
+    {
+      "id": "escena_1",
+      "tag": "EL LUGAR PROHIBIDO",
+      "image": "ia_escena_1.jpg",
+      "audioFile": "audio_scene_1.mp3",
+      "durationInFrames": 262
+    },
+    {
+      "id": "escena_2",
+      "tag": "SILENCIO ABSOLUTO",
+      "image": "ia_escena_2.jpg",
+      "audioFile": "audio_scene_2.mp3",
+      "durationInFrames": 250
+    },
+    {
+      "id": "escena_3",
+      "tag": "LA ADAPTACIÓN",
+      "image": "ia_escena_3.jpg",
+      "audioFile": "audio_scene_3.mp3",
+      "durationInFrames": 267
+    },
+    {
+      "id": "escena_4",
+      "tag": "TU PROPIO CUERPO",
+      "image": "ia_escena_4.jpg",
+      "audioFile": "audio_scene_4.mp3",
+      "durationInFrames": 255
+    },
+    {
+      "id": "escena_5",
+      "tag": "SONIDOS INTERNOS",
+      "image": "ia_escena_5.jpg",
+      "audioFile": "audio_scene_5.mp3",
+      "durationInFrames": 253
+    },
+    {
+      "id": "escena_6",
+      "tag": "PÉRDIDA DE EQUILIBRIO",
+      "image": "ia_escena_6.jpg",
+      "audioFile": "audio_scene_6.mp3",
+      "durationInFrames": 304
+    },
+    {
+      "id": "escena_7",
+      "tag": "ALUCINACIONES",
+      "image": "ia_escena_7.jpg",
+      "audioFile": "audio_scene_7.mp3",
+      "durationInFrames": 277
+    },
+    {
+      "id": "escena_8",
+      "tag": "ENTRENAMIENTO NASA",
+      "image": "ia_escena_8.jpg",
+      "audioFile": "audio_scene_8.mp3",
+      "durationInFrames": 249
+    },
+    {
+      "id": "escena_9",
+      "tag": "EL LÍMITE HUMANO",
+      "image": "ia_escena_9.jpg",
+      "audioFile": "audio_scene_9.mp3",
+      "durationInFrames": 296
+    },
+    {
+      "id": "escena_10",
+      "tag": "¿LO SOPORTARÍAS?",
+      "image": "ia_escena_10.jpg",
+      "audioFile": "audio_scene_10.mp3",
+      "durationInFrames": 250
+    }
+  ]
+}
