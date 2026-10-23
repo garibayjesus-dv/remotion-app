@@ -26,6 +26,7 @@ jobs:
       - name: Generar imágenes, voz y renderizar video
         working-directory: ./my-video
         env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
           AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
           AZURE_SPEECH_REGION: ${{ secrets.AZURE_SPEECH_REGION }}
         run: node crear-video-ia.mjs
