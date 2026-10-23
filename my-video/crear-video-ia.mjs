@@ -28,6 +28,30 @@ if (CUENTAS_CF.length === 0 || !AZURE_KEY || !AZURE_REGION) {
 
 let indiceCuentaActual = 0;
 
+// Función auxiliar para extraer el arreglo de escenas sin importar cómo lo devuelva la IA
+function extraerEscenas(respuesta) {
+  // Caso 1: La API ya devolvió el arreglo parseado
+  if (Array.isArray(respuesta)) {
+    return respuesta;
+  }
+  // Caso 2: La API devolvió un objeto que contiene el arreglo (ej. { scenes: [...] })
+  if (respuesta && typeof respuesta === "object") {
+    const posibleArray = Object.values(respuesta).find((v) => Array.isArray(v));
+    if (posibleArray) return posibleArray;
+  }
+  // Caso 3: La API devolvió un string (con o sin bloques ```json)
+  if (typeof respuesta === "string") {
+    const limpio = respuesta.replace(/```json|```/gi, "").trim();
+    const jsonMatch = limpio.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    const parsed = JSON.parse(limpio);
+    if (Array.isArray(parsed)) return parsed;
+  }
+  return null;
+}
+
 // ==========================================
 // 1. GENERADOR AUTOMÁTICO DE GUION CON IA
 // ==========================================
@@ -52,38 +76,46 @@ Reglas:
 - Escena 1 debe ser una pregunta o gancho intrigante.
 - Escena 12 debe cerrar con una reflexión e invitar a seguir la cuenta.`;
 
-  // Intento 1: Gemini 2.5 Flash (Soporta claves 'AQ.' y 'AIza')
+  // Intento 1: Google Gemini (probando modelos actuales en orden)
   if (GEMINI_API_KEY) {
-    try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY.trim()}`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: promptSistema }] }],
-          generationConfig: { responseMimeType: "application/json" }
-        }),
-      });
+    const modelosGemini = [
+      "gemini-3.0-flash",
+      "gemini-2.5-flash-lite",
+      "gemini-2.0-flash",
+    ];
 
-      const data = await res.json();
-      if (res.ok) {
-        const textoJson = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (textoJson) {
-          const escenas = JSON.parse(textoJson);
-          console.log(`✅ Guion generado con éxito con Google Gemini (${escenas.length} escenas).`);
-          return escenas;
+    for (const modelo of modelosGemini) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${GEMINI_API_KEY.trim()}`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: promptSistema }] }],
+            generationConfig: { responseMimeType: "application/json" },
+          }),
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          const textoJson = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+          const escenas = extraerEscenas(textoJson);
+          if (escenas && escenas.length > 0) {
+            console.log(`✅ Guion generado con éxito con Google Gemini (${modelo} - ${escenas.length} escenas).`);
+            return escenas;
+          }
+        } else {
+          console.warn(`⚠️ Aviso de Gemini API (${modelo}): ${ data.error?.message || JSON.stringify(data) }`);
         }
-      } else {
-        console.warn(`⚠️ Aviso de Gemini API: ${JSON.stringify(data.error || data)}`);
+      } catch (e) {
+        console.warn(`⚠️ Error en Gemini (${modelo}): ${e.message}`);
       }
-    } catch (e) {
-      console.warn(`⚠️ Gemini no disponible (${e.message}), usando respaldo de Cloudflare...`);
     }
   }
 
-  // Intento 2 (Respaldo automático con rotación de cuentas de Cloudflare)
-  while (indiceCuentaActual < CUENTAS_CF.length) {
-    const cuenta = CUENTAS_CF[indiceCuentaActual];
+  // Intento 2: Respaldo con rotación de cuentas de Cloudflare
+  for (let i = 0; i < CUENTAS_CF.length; i++) {
+    const cuenta = CUENTAS_CF[i];
     try {
       const cfUrl = `https://api.cloudflare.com/client/v4/accounts/${cuenta.id}/ai/run/@cf/meta/llama-3.1-8b-instruct`;
       const response = await fetch(cfUrl, {
@@ -95,7 +127,7 @@ Reglas:
         body: JSON.stringify({
           messages: [
             { role: "system", content: "Responde únicamente con un JSON array válido sin markdown." },
-            { role: "user", content: promptSistema }
+            { role: "user", content: promptSistema },
           ],
           max_tokens: 3500,
         }),
@@ -104,20 +136,18 @@ Reglas:
       const data = await response.json();
 
       if (data.success && data.result?.response) {
-        const rawText = String(data.result.response);
-        const jsonMatch = rawText.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-          const escenas = JSON.parse(jsonMatch[0]);
+        const escenas = extraerEscenas(data.result.response);
+        if (escenas && escenas.length > 0) {
           console.log(`✅ Guion generado con éxito usando ${cuenta.nombre} (${escenas.length} escenas).`);
           return escenas;
         }
+      } else {
+        console.warn(`⚠️ Respuesta de ${cuenta.nombre}:`, JSON.stringify(data.errors || data));
       }
 
       console.warn(`⚠️ ${cuenta.nombre} sin recursos para texto. Cambiando de cuenta...`);
-      indiceCuentaActual++;
     } catch (err) {
       console.warn(`⚠️ Error en ${cuenta.nombre}: ${err.message}. Cambiando de cuenta...`);
-      indiceCuentaActual++;
     }
   }
 
@@ -151,7 +181,7 @@ async function generarImagenCloudflare(prompt, outputPath) {
         return;
       }
 
-      console.warn(`⚠️ ${cuenta.nombre} agotada. Cambiando a la siguiente cuenta...`);
+      console.warn(`⚠️ ${cuenta.nombre} agotada para imágenes. Cambiando a la siguiente cuenta...`);
       indiceCuentaActual++;
     } catch (err) {
       console.warn(`⚠️ Error en ${cuenta.nombre}: ${err.message}. Cambiando a la siguiente cuenta...`);
@@ -175,7 +205,7 @@ async function generarVozAzure(texto, outputPath) {
       "Ocp-Apim-Subscription-Key": AZURE_KEY,
       "Content-Type": "application/ssml+xml",
       "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3",
-      "User-Agent": "RemotionReels"
+      "User-Agent": "RemotionReels",
     },
     body: ssml,
   });
@@ -198,7 +228,7 @@ async function main() {
     const scene = listaEscenas[i];
     const nombreImagen = `ia_escena_${i + 1}.jpg`;
     console.log(`[${i + 1}/${listaEscenas.length}] Procesando escena: "${scene.tag}"...`);
-    
+
     const audioPath = `public/audio_scene_${i + 1}.mp3`;
     const imagePath = `public/${nombreImagen}`;
 
@@ -208,12 +238,12 @@ async function main() {
     const durationSec = getMP3Duration(fs.readFileSync(audioPath)) / 1000;
     const totalFrames = Math.ceil(durationSec * 30) + 8;
 
-    processedScenes.push({ 
+    processedScenes.push({
       id: String(i + 1),
       tag: scene.tag || `ESCENA ${i + 1}`,
-      image: nombreImagen, 
-      audioFile: `audio_scene_${i + 1}.mp3`, 
-      durationInFrames: totalFrames 
+      image: nombreImagen,
+      audioFile: `audio_scene_${i + 1}.mp3`,
+      durationInFrames: totalFrames,
     });
   }
 
@@ -224,7 +254,7 @@ async function main() {
   console.log("\n🎉 ¡Reel completado con éxito!");
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error("❌ Fallo en la ejecución:", err);
   process.exit(1);
 });
