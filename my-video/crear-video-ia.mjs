@@ -98,17 +98,33 @@ const guion = [
   }
 ];
 
-// GENERADOR FLUX NATIVO 9:16 (ILIMITADO Y GRATUITO)
-async function generarImagen(prompt, outputPath) {
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=720&height=1280&nologo=true&model=flux`;
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Error generando imagen: ${response.statusText}`);
+// GENERADOR TURBO ULTRA RÁPIDO CON TOLERANCIA A TIMEOUT
+async function generarImagen(prompt, outputPath, reintentos = 3) {
+  const seed = Math.floor(Math.random() * 999999);
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=720&height=1280&nologo=true&model=turbo&seed=${seed}`;
+
+  for (let intento = 1; intento <= reintentos; intento++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 segundos límite
+
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      fs.writeFileSync(outputPath, buffer);
+      return;
+    } catch (err) {
+      console.warn(`⚠️ Intento ${intento}/${reintentos} falló (${err.message}). Reintentando...`);
+      if (intento === reintentos) throw err;
+      await new Promise(r => setTimeout(r, 2000));
+    }
   }
-  fs.writeFileSync(outputPath, Buffer.from(await response.arrayBuffer()));
 }
 
-// LOCUCIÓN CON AZURE SPEECH
+// LOCUCIÓN PROFESIONAL CON AZURE SPEECH
 async function generarVozAzure(texto, outputPath) {
   const url = `https://${AZURE_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`;
   const ssml = `<speak version='1.0' xml:lang='es-MX'><voice xml:lang='es-MX' name='es-MX-JorgeNeural'>${texto}</voice></speak>`;
@@ -129,7 +145,7 @@ async function generarVozAzure(texto, outputPath) {
 }
 
 async function main() {
-  console.log("\n🚀 INICIANDO PRODUCCIÓN CON MOTOR FLUX VERTICAL Y VOZ AZURE PREMIUM\n");
+  console.log("\n🚀 INICIANDO PRODUCCIÓN CON MOTOR TURBO VERTICAL Y VOZ AZURE PREMIUM\n");
 
   const listaEscenas = Array.isArray(guion) ? guion : (guion.scenes || guion.escenas || []);
 
