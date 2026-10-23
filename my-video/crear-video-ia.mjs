@@ -3,12 +3,11 @@ import { execSync } from "child_process";
 import getMP3Duration from "get-mp3-duration";
 import "dotenv/config";
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const AZURE_KEY = process.env.AZURE_SPEECH_KEY;
 const AZURE_REGION = process.env.AZURE_SPEECH_REGION;
 
-if (!GEMINI_API_KEY || !AZURE_KEY || !AZURE_REGION) {
-  console.error("❌ Faltan GEMINI_API_KEY, AZURE_SPEECH_KEY o AZURE_SPEECH_REGION en las variables.");
+if (!AZURE_KEY || !AZURE_REGION) {
+  console.error("❌ Faltan AZURE_SPEECH_KEY o AZURE_SPEECH_REGION en las variables.");
   process.exit(1);
 }
 
@@ -99,33 +98,17 @@ const guion = [
   }
 ];
 
-// GENERADOR CON GOOGLE IMAGEN 3 (Formato vertical 9:16 nativo)
-async function generarImagenGoogle(prompt, outputPath) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${GEMINI_API_KEY}`;
-  
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      instances: [{ prompt }],
-      parameters: {
-        sampleCount: 1,
-        aspectRatio: "9:16",
-        outputMimeType: "image/jpeg"
-      }
-    }),
-  });
-
-  const data = await response.json();
+// GENERADOR FLUX NATIVO 9:16 (ILIMITADO Y GRATUITO)
+async function generarImagen(prompt, outputPath) {
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=720&height=1280&nologo=true&model=flux`;
+  const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`Error en Google Imagen 3: ${JSON.stringify(data)}`);
+    throw new Error(`Error generando imagen: ${response.statusText}`);
   }
-
-  const base64Data = data.predictions[0].bytesBase64Encoded;
-  fs.writeFileSync(outputPath, Buffer.from(base64Data, "base64"));
+  fs.writeFileSync(outputPath, Buffer.from(await response.arrayBuffer()));
 }
 
-// LOCUCIÓN PROFESIONAL CON AZURE SPEECH
+// LOCUCIÓN CON AZURE SPEECH
 async function generarVozAzure(texto, outputPath) {
   const url = `https://${AZURE_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`;
   const ssml = `<speak version='1.0' xml:lang='es-MX'><voice xml:lang='es-MX' name='es-MX-JorgeNeural'>${texto}</voice></speak>`;
@@ -146,7 +129,7 @@ async function generarVozAzure(texto, outputPath) {
 }
 
 async function main() {
-  console.log("\n🚀 INICIANDO PRODUCCIÓN CON GOOGLE IMAGEN 3 Y VOZ AZURE PREMIUM\n");
+  console.log("\n🚀 INICIANDO PRODUCCIÓN CON MOTOR FLUX VERTICAL Y VOZ AZURE PREMIUM\n");
 
   const listaEscenas = Array.isArray(guion) ? guion : (guion.scenes || guion.escenas || []);
 
@@ -164,7 +147,7 @@ async function main() {
     const audioPath = `public/audio_scene_${i + 1}.mp3`;
     const imagePath = `public/${scene.imageFile}`;
 
-    await generarImagenGoogle(scene.imagePrompt, imagePath);
+    await generarImagen(scene.imagePrompt, imagePath);
     await generarVozAzure(scene.text, audioPath);
 
     const durationSec = getMP3Duration(fs.readFileSync(audioPath)) / 1000;
@@ -183,7 +166,7 @@ async function main() {
 
   console.log("\n🎬 Renderizando con Remotion en GitHub Actions...");
   execSync(`npx remotion render LongReel out/reel_azure_premium.mp4 --concurrency=1`, { stdio: "inherit" });
-  console.log("\n🎉 ¡Reel completado con Google Imagen 3 y Azure Speech!");
+  console.log("\n🎉 ¡Reel completado con éxito!");
 }
 
 main().catch(err => console.error("❌ Fallo en la ejecución:", err));
