@@ -2,11 +2,8 @@ import React from "react";
 import {
   AbsoluteFill,
   Audio,
-  interpolate,
   Series,
   staticFile,
-  useCurrentFrame,
-  useVideoConfig,
 } from "remotion";
 import { Scene, SceneProps } from "./Scene";
 
@@ -22,59 +19,28 @@ export const defaultLongVideoProps: LongVideoProps = {
 };
 
 export const LongVideo: React.FC<LongVideoProps> = ({ scenes = [] }) => {
-  const frame = useCurrentFrame();
-  const { durationInFrames } = useVideoConfig();
-
-  // Barra de progreso global del video (0% a 100%)
-  const globalProgress = interpolate(frame, [0, durationInFrames], [0, 100], {
-    extrapolateRight: "clamp",
-  });
-
   return (
     <AbsoluteFill style={{ backgroundColor: "#000000" }}>
-      {/* Música de fondo tenue */}
-      <Audio src={staticFile("musica.mp3")} volume={0.06} />
+      {/* Música de fondo ambiental tenue */}
+      <Audio src={staticFile("musica.mp3")} volume={0.07} />
 
-      {/* Secuencia de escenas limpia (sin subtítulos) */}
+      {/* Secuencia de escenas con efectos de cámara alternados y sin textos */}
       <Series>
-        {scenes.map((scene) => (
+        {scenes.map((scene, index) => (
           <Series.Sequence
-            key={scene.id}
+            key={scene.id || index}
             durationInFrames={scene.durationInFrames}
           >
             <Scene
+              index={index}
               tag={scene.tag}
+              tone={scene.tone}
               image={scene.image}
               audioFile={scene.audioFile}
             />
           </Series.Sequence>
         ))}
       </Series>
-
-      {/* Barra de progreso superior continua */}
-      <div
-        style={{
-          position: "absolute",
-          top: "60px",
-          left: "60px",
-          right: "60px",
-          height: "12px",
-          backgroundColor: "rgba(255, 255, 255, 0.2)",
-          borderRadius: "10px",
-          overflow: "hidden",
-          zIndex: 100,
-        }}
-      >
-        <div
-          style={{
-            height: "100%",
-            width: `${globalProgress}%`,
-            backgroundColor: "#38bdf8",
-            borderRadius: "10px",
-            boxShadow: "0 0 16px rgba(56, 189, 248, 0.9)",
-          }}
-        />
-      </div>
     </AbsoluteFill>
   );
 };

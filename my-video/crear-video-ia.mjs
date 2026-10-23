@@ -8,6 +8,9 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const AZURE_KEY = process.env.AZURE_SPEECH_KEY;
 const AZURE_REGION = process.env.AZURE_SPEECH_REGION;
 
+// Voz de locutor (puedes usar "es-MX-JorgeNeural", "es-MX-GerardoNeural" o "es-ES-AlvaroNeural")
+const VOZ_LOCUTOR = process.env.AZURE_VOICE || "es-MX-JorgeNeural";
+
 const CUENTAS_CF = [
   {
     nombre: "Cuenta 1 (Principal)",
@@ -28,24 +31,16 @@ if (CUENTAS_CF.length === 0 || !AZURE_KEY || !AZURE_REGION) {
 
 let indiceCuentaActual = 0;
 
-// Función auxiliar para extraer el arreglo de escenas sin importar cómo lo devuelva la IA
 function extraerEscenas(respuesta) {
-  // Caso 1: La API ya devolvió el arreglo parseado
-  if (Array.isArray(respuesta)) {
-    return respuesta;
-  }
-  // Caso 2: La API devolvió un objeto que contiene el arreglo (ej. { scenes: [...] })
+  if (Array.isArray(respuesta)) return respuesta;
   if (respuesta && typeof respuesta === "object") {
     const posibleArray = Object.values(respuesta).find((v) => Array.isArray(v));
     if (posibleArray) return posibleArray;
   }
-  // Caso 3: La API devolvió un string (con o sin bloques ```json)
   if (typeof respuesta === "string") {
     const limpio = respuesta.replace(/```json|```/gi, "").trim();
     const jsonMatch = limpio.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
+    if (jsonMatch) return JSON.parse(jsonMatch[0]);
     const parsed = JSON.parse(limpio);
     if (Array.isArray(parsed)) return parsed;
   }
@@ -53,12 +48,12 @@ function extraerEscenas(respuesta) {
 }
 
 // ==========================================
-// 1. GENERADOR AUTOMÁTICO DE GUION CON IA
+// 1. GENERADOR AUTOMÁTICO DE GUION CON GEMINI 3.8 FLASH
 // ==========================================
 async function generarGuionAutomatico(tema) {
   console.log(`🧠 Escribiendo guion viral de 12 escenas sobre: "${tema}"...`);
 
-  const promptSistema = `Actúa como guionista experto en Reels virales de misterio, ciencia e historia de alta retención.
+  const promptSistema = `Actúa como director y guionista experto en documentales cortos y Reels virales de misterio, ciencia e historia.
 Escribe un guion de exactamente 12 escenas sobre el tema: "${tema}".
 
 Devuelve ÚNICAMENTE un arreglo JSON válido (sin texto adicional ni bloques markdown) con esta estructura exacta:
@@ -66,22 +61,28 @@ Devuelve ÚNICAMENTE un arreglo JSON válido (sin texto adicional ni bloques mar
   {
     "id": "1",
     "tag": "GANCHO",
-    "text": "Narración en español neutro de 20 a 28 palabras. Escribe todos los números con letras (ej: mil novecientos setenta).",
-    "imagePrompt": "Detailed English prompt for FLUX.1, hyperrealistic, cinematic lighting, 35mm film, dramatic atmosphere, ultra detailed, 8k, vertical 9:16",
+    "tone": "intriga",
+    "text": "Narración en español neutro de 20 a 26 palabras. Usa signos de interrogación, exclamación y puntos suspensivos (...) para dar dramatismo. Escribe todos los números con letras.",
+    "imagePrompt": "Cinematic medium or wide shot in English for FLUX.1. Describe a clear, coherent scene with one main subject, realistic proportions, moody volumetric lighting, 35mm film grain, dark atmospheric color grading, 8k, no text, no letters, no watermarks",
     "imageFile": "ia_escena_1.jpg"
   }
 ]
-Reglas:
+Reglas obligatorias:
 - Exactamente 12 escenas numeradas del 1 al 12 ("ia_escena_1.jpg" a "ia_escena_12.jpg").
-- Escena 1 debe ser una pregunta o gancho intrigante.
-- Escena 12 debe cerrar con una reflexión e invitar a seguir la cuenta.`;
+- El campo "tone" debe ser uno de estos 4 valores según la emoción de la escena: "intriga", "serio", "impacto", "reflexion".
+- En "imagePrompt": NUNCA pidas texto, carteles ni letras. Evita primeros planos de manos o multitudes para que la IA no deforme figuras. Prefiere planos generales, siluetas dramáticas, objetos en primer plano o escenarios atmosféricos hiperrealistas.
+- Escena 1 ("tone": "intriga") debe ser un gancho impactante.
+- Escena 12 ("tone": "reflexion") debe cerrar con una reflexión profunda.`;
 
-  // Intento 1: Google Gemini (probando modelos actuales en orden)
-  if (GEMINI_API_KEY) {
+  // Intento 1: Google Gemini (usando los modelos exactos habilitados en tu cuenta)
+  if (!GEMINI_API_KEY) {
+    console.warn("⚠️ GEMINI_API_KEY no está configurada.");
+  } else {
     const modelosGemini = [
-      "gemini-3.0-flash",
-      "gemini-2.5-flash-lite",
-      "gemini-2.0-flash",
+      "gemini-3.8-flash",
+      "gemini-3.7-flash",
+      "gemini-3.5-flash",
+      "gemini-flash-latest",
     ];
 
     for (const modelo of modelosGemini) {
@@ -92,7 +93,10 @@ Reglas:
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contents: [{ parts: [{ text: promptSistema }] }],
-            generationConfig: { responseMimeType: "application/json" },
+            generationConfig: {
+              responseMimeType: "application/json",
+              temperature: 0.7,
+            },
           }),
         });
 
@@ -105,15 +109,15 @@ Reglas:
             return escenas;
           }
         } else {
-          console.warn(`⚠️ Aviso de Gemini API (${modelo}): ${ data.error?.message || JSON.stringify(data) }`);
+          console.warn(`⚠️ Aviso de Gemini API (${modelo}): ${data.error?.message || JSON.stringify(data)}`);
         }
       } catch (e) {
-        console.warn(`⚠️ Error en Gemini (${modelo}): ${e.message}`);
+        console.warn(`⚠️ Error al conectar con Gemini (${modelo}): ${e.message}`);
       }
     }
   }
 
-  // Intento 2: Respaldo con rotación de cuentas de Cloudflare
+  // Intento 2: Respaldo con Cloudflare
   for (let i = 0; i < CUENTAS_CF.length; i++) {
     const cuenta = CUENTAS_CF[i];
     try {
@@ -141,11 +145,8 @@ Reglas:
           console.log(`✅ Guion generado con éxito usando ${cuenta.nombre} (${escenas.length} escenas).`);
           return escenas;
         }
-      } else {
-        console.warn(`⚠️ Respuesta de ${cuenta.nombre}:`, JSON.stringify(data.errors || data));
       }
-
-      console.warn(`⚠️ ${cuenta.nombre} sin recursos para texto. Cambiando de cuenta...`);
+      console.warn(`⚠️ ${cuenta.nombre} no devolvió guion válido. Cambiando de cuenta...`);
     } catch (err) {
       console.warn(`⚠️ Error en ${cuenta.nombre}: ${err.message}. Cambiando de cuenta...`);
     }
@@ -155,9 +156,11 @@ Reglas:
 }
 
 // ==========================================
-// 2. GENERADOR DE IMÁGENES (ROTACIÓN CF)
+// 2. GENERADOR DE IMÁGENES MEJORADO (FLUX 8 STEPS)
 // ==========================================
 async function generarImagenCloudflare(prompt, outputPath) {
+  const promptMejorado = `${prompt}, masterpiece, photorealistic, cinematic composition, dramatic shadows, sharp focus, no text, no watermark, natural anatomy`;
+
   while (indiceCuentaActual < CUENTAS_CF.length) {
     const cuenta = CUENTAS_CF[indiceCuentaActual];
 
@@ -170,7 +173,10 @@ async function generarImagenCloudflare(prompt, outputPath) {
             Authorization: `Bearer ${cuenta.token}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ prompt: prompt, steps: 4 }),
+          body: JSON.stringify({
+            prompt: promptMejorado,
+            steps: 8,
+          }),
         }
       );
 
@@ -193,24 +199,60 @@ async function generarImagenCloudflare(prompt, outputPath) {
 }
 
 // ==========================================
-// 3. LOCUCIÓN CON AZURE SPEECH
+// 3. LOCUCIÓN PROFESIONAL CON EXPRESIONES (SSML AVANZADO)
 // ==========================================
-async function generarVozAzure(texto, outputPath) {
+function escaparXml(texto) {
+  return texto
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+async function generarVozAzure(texto, tono = "serio", outputPath) {
   const url = `https://${AZURE_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`;
-  const ssml = `<speak version='1.0' xml:lang='es-MX'><voice xml:lang='es-MX' name='es-MX-JorgeNeural'>${texto}</voice></speak>`;
+
+  const configuracionTono = {
+    intriga:   { style: "whispering", styledegree: "0.6", rate: "+4%", pitch: "-4%" },
+    serio:     { style: "narration-professional", styledegree: "1.3", rate: "+2%", pitch: "-5%" },
+    impacto:   { style: "excited", styledegree: "1.2", rate: "+6%", pitch: "-2%" },
+    reflexion: { style: "empathetic", styledegree: "1.2", rate: "-2%", pitch: "-6%" },
+  };
+
+  const cfg = configuracionTono[tono] || configuracionTono.serio;
+
+  const textoConPausas = escaparXml(texto)
+    .replace(/\.\.\./g, '<break time="450ms"/>')
+    .replace(/\. /g, '. <break time="300ms"/>')
+    .replace(/\? /g, '? <break time="350ms"/>')
+    .replace(/! /g, '! <break time="350ms"/>');
+
+  const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="es-MX">
+    <voice name="${VOZ_LOCUTOR}">
+      <mstts:express-as style="${cfg.style}" styledegree="${cfg.styledegree}">
+        <prosody rate="${cfg.rate}" pitch="${cfg.pitch}">
+          ${textoConPausas}
+        </prosody>
+      </mstts:express-as>
+    </voice>
+  </speak>`;
 
   const response = await fetch(url, {
     method: "POST",
     headers: {
       "Ocp-Apim-Subscription-Key": AZURE_KEY,
       "Content-Type": "application/ssml+xml",
-      "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3",
+      "X-Microsoft-OutputFormat": "audio-24khz-96kbitrate-mono-mp3",
       "User-Agent": "RemotionReels",
     },
     body: ssml,
   });
 
-  if (!response.ok) throw new Error(`Error de Azure TTS: ${response.statusText}`);
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Error de Azure TTS (${response.status}): ${errText}`);
+  }
   fs.writeFileSync(outputPath, Buffer.from(await response.arrayBuffer()));
 }
 
@@ -227,13 +269,15 @@ async function main() {
   for (let i = 0; i < listaEscenas.length; i++) {
     const scene = listaEscenas[i];
     const nombreImagen = `ia_escena_${i + 1}.jpg`;
-    console.log(`[${i + 1}/${listaEscenas.length}] Procesando escena: "${scene.tag}"...`);
+    const tonoEscena = scene.tone || (i === 0 ? "intriga" : i === listaEscenas.length - 1 ? "reflexion" : "serio");
+
+    console.log(`[${i + 1}/${listaEscenas.length}] Procesando escena: "${scene.tag}" (Tono: ${tonoEscena})...`);
 
     const audioPath = `public/audio_scene_${i + 1}.mp3`;
     const imagePath = `public/${nombreImagen}`;
 
     await generarImagenCloudflare(scene.imagePrompt, imagePath);
-    await generarVozAzure(scene.text, audioPath);
+    await generarVozAzure(scene.text, tonoEscena, audioPath);
 
     const durationSec = getMP3Duration(fs.readFileSync(audioPath)) / 1000;
     const totalFrames = Math.ceil(durationSec * 30) + 8;
@@ -241,6 +285,7 @@ async function main() {
     processedScenes.push({
       id: String(i + 1),
       tag: scene.tag || `ESCENA ${i + 1}`,
+      tone: tonoEscena,
       image: nombreImagen,
       audioFile: `audio_scene_${i + 1}.mp3`,
       durationInFrames: totalFrames,
