@@ -2,6 +2,11 @@ name: Generar Reel con IA
 
 on:
   workflow_dispatch:
+    inputs:
+      tema:
+        description: '🎬 Tema del Reel (ej: El incidente del Paso Diátlov)'
+        required: true
+        default: 'El misterio del barco fantasma Mary Celeste'
 
 jobs:
   build:
@@ -23,9 +28,11 @@ jobs:
           cd my-video
           npm ci --prefer-offline
 
-      - name: Generar imágenes, voz y renderizar video
+      - name: Generar guion, imágenes, voz y renderizar video
         working-directory: ./my-video
         env:
+          TEMA_VIDEO: ${{ github.event.inputs.tema }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID_2: ${{ secrets.CLOUDFLARE_ACCOUNT_ID_2 }}
@@ -37,6 +44,6 @@ jobs:
       - name: Subir video renderizado
         uses: actions/upload-artifact@v4
         with:
-          name: reel-kola
+          name: reel-generado
           path: my-video/out/reel_azure_premium.mp4
           retention-days: 7
