@@ -1,6 +1,7 @@
 import fs from "fs";
 import { execSync } from "child_process";
 import getMP3Duration from "get-mp3-duration";
+import { InferenceClient } from "@huggingface/inference";
 import "dotenv/config";
 
 const HF_TOKEN = process.env.HF_TOKEN;
@@ -11,6 +12,8 @@ if (!HF_TOKEN || !AZURE_KEY || !AZURE_REGION) {
   console.error("❌ Faltan HF_TOKEN, AZURE_SPEECH_KEY o AZURE_SPEECH_REGION.");
   process.exit(1);
 }
+
+const hf = new InferenceClient(HF_TOKEN);
 
 const guion = [
   {
@@ -99,44 +102,28 @@ const guion = [
   }
 ];
 
-// NUEVO ROUTER OFICIAL DE HUGGING FACE (FLUX.1-schnell)
-async function generarImagenHuggingFace(prompt, outputPath, reintentos = 3) {
-  const modelUrl = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell";
+// GENERADOR MULTIPROVEEDOR OFICIAL DE HUGGING FACE
+async function generarImagenHuggingFace(prompt, outputPath) {
+  const proveedores = ["auto", "fal-ai", "together", "nscale"];
 
-  for (let intento = 1; intento <= reintentos; intento++) {
+  for (const provider of proveedores) {
     try {
-      const response = await fetch(modelUrl, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${HF_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          inputs: prompt,
-          parameters: { width: 720, height: 1280, num_inference_steps: 4 }
-        }),
+      const imageBlob = await hf.textToImage({
+        provider: provider,
+        model: "black-forest-labs/FLUX.1-schnell",
+        inputs: prompt,
+        parameters: { num_inference_steps: 4 },
       });
 
-      if (response.status === 503) {
-        console.warn("⏳ Modelo cargando en servidor. Esperando 12 segundos...");
-        await new Promise(r => setTimeout(r, 12000));
-        continue;
-      }
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
-      }
-
-      const buffer = Buffer.from(await response.arrayBuffer());
+      const buffer = Buffer.from(await imageBlob.arrayBuffer());
       fs.writeFileSync(outputPath, buffer);
       return;
     } catch (err) {
-      console.warn(`⚠️ Intento ${intento}/${reintentos} falló: ${err.message}`);
-      if (intento === reintentos) throw err;
-      await new Promise(r => setTimeout(r, 4000));
+      console.warn(`⚠️ Proveedor '${provider}' falló: ${err.message}. Probando siguiente...`);
     }
   }
+
+  throw new Error("No se pudo generar la imagen con ningún proveedor de Hugging Face.");
 }
 
 async function generarVozAzure(texto, outputPath) {
@@ -159,7 +146,7 @@ async function generarVozAzure(texto, outputPath) {
 }
 
 async function main() {
-  console.log("\n🚀 INICIANDO PRODUCCIÓN CON ROUTER HUGGING FACE FLUX.1 Y VOZ AZURE\n");
+  console.log("\n🚀 INICIANDO PRODUCCIÓN CON HUGGING FACE SDK (AUTO-PROVIDER) Y VOZ AZURE\n");
 
   const listaEscenas = Array.isArray(guion) ? guion : (guion.scenes || guion.escenas || []);
 

@@ -9,6 +9,7 @@
   },
   "private": true,
   "dependencies": {
+    "@huggingface/inference": "^4.13.32",
     "@remotion/cli": "4.0.538",
     "@remotion/zod-types": "4.0.538",
     "dotenv": "^18.0.9",
