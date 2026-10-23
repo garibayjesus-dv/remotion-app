@@ -84,7 +84,12 @@ async function main() {
     const durationSec = getMP3Duration(fs.readFileSync(audioPath)) / 1000;
     const totalFrames = Math.ceil(durationSec * 30) + 8; // Margen para corte natural
 
-    processedScenes.push({ ...scene, audioFile: `audio_scene_${i + 1}.mp3`, durationInFrames: totalFrames });
+    processedScenes.push({ 
+  ...scene, 
+  image: scene.imageFile, 
+  audioFile: `audio_scene_${i + 1}.mp3`, 
+  durationInFrames: totalFrames 
+});
   }
 
   fs.writeFileSync("./guion_sincronizado.json", JSON.stringify({ scenes: processedScenes }, null, 2));
