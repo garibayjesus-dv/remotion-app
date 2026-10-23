@@ -52,10 +52,10 @@ Reglas:
 - Escena 1 debe ser una pregunta o gancho intrigante.
 - Escena 12 debe cerrar con una reflexión e invitar a seguir la cuenta.`;
 
-  // Intento 1: Gemini Flash (Gratis y JSON nativo)
+  // Intento 1: Gemini 2.5 Flash (Soporta claves 'AQ.' y 'AIza')
   if (GEMINI_API_KEY) {
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY.trim()}`;
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -65,44 +65,63 @@ Reglas:
         }),
       });
 
+      const data = await res.json();
       if (res.ok) {
-        const data = await res.json();
-        const textoJson = data.candidates[0].content.parts[0].text;
-        const escenas = JSON.parse(textoJson);
-        console.log(`✅ Guion generado con éxito con Gemini (${escenas.length} escenas).`);
-        return escenas;
+        const textoJson = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (textoJson) {
+          const escenas = JSON.parse(textoJson);
+          console.log(`✅ Guion generado con éxito con Google Gemini (${escenas.length} escenas).`);
+          return escenas;
+        }
+      } else {
+        console.warn(`⚠️ Aviso de Gemini API: ${JSON.stringify(data.error || data)}`);
       }
     } catch (e) {
-      console.warn(`⚠️ Gemini no disponible (${e.message}), usando IA de Cloudflare...`);
+      console.warn(`⚠️ Gemini no disponible (${e.message}), usando respaldo de Cloudflare...`);
     }
   }
 
-  // Intento 2 (Respaldo automático): Llama 3.1 en Cloudflare Workers AI
-  const cuenta = CUENTAS_CF[indiceCuentaActual] || CUENTAS_CF[0];
-  const cfUrl = `https://api.cloudflare.com/client/v4/accounts/${cuenta.id}/ai/run/@cf/meta/llama-3.1-8b-instruct`;
-  const response = await fetch(cfUrl, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${cuenta.token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      messages: [
-        { role: "system", content: "Responde únicamente con un JSON array válido sin markdown." },
-        { role: "user", content: promptSistema }
-      ],
-      max_tokens: 3500,
-    }),
-  });
+  // Intento 2 (Respaldo automático con rotación de cuentas de Cloudflare)
+  while (indiceCuentaActual < CUENTAS_CF.length) {
+    const cuenta = CUENTAS_CF[indiceCuentaActual];
+    try {
+      const cfUrl = `https://api.cloudflare.com/client/v4/accounts/${cuenta.id}/ai/run/@cf/meta/llama-3.1-8b-instruct`;
+      const response = await fetch(cfUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${cuenta.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: [
+            { role: "system", content: "Responde únicamente con un JSON array válido sin markdown." },
+            { role: "user", content: promptSistema }
+          ],
+          max_tokens: 3500,
+        }),
+      });
 
-  const data = await response.json();
-  const rawText = data.result.response;
-  const jsonMatch = rawText.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) throw new Error("No se pudo extraer el JSON del guion automático.");
-  
-  const escenas = JSON.parse(jsonMatch[0]);
-  console.log(`✅ Guion generado con éxito con Cloudflare Llama 3.1 (${escenas.length} escenas).`);
-  return escenas;
+      const data = await response.json();
+
+      if (data.success && data.result?.response) {
+        const rawText = String(data.result.response);
+        const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          const escenas = JSON.parse(jsonMatch[0]);
+          console.log(`✅ Guion generado con éxito usando ${cuenta.nombre} (${escenas.length} escenas).`);
+          return escenas;
+        }
+      }
+
+      console.warn(`⚠️ ${cuenta.nombre} sin recursos para texto. Cambiando de cuenta...`);
+      indiceCuentaActual++;
+    } catch (err) {
+      console.warn(`⚠️ Error en ${cuenta.nombre}: ${err.message}. Cambiando de cuenta...`);
+      indiceCuentaActual++;
+    }
+  }
+
+  throw new Error("❌ No se pudo generar el guion: todas las fuentes y cuentas fallaron.");
 }
 
 // ==========================================
