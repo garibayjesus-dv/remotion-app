@@ -4,39 +4,28 @@ on:
   workflow_dispatch:
 
 jobs:
-  render:
-    name: Compilar Video Remotion
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    # Esto le indica a GitHub que trabaje dentro de tu carpeta
-    defaults:
-      run:
-        working-directory: ./my-video 
 
     steps:
-      - name: Clonar repositorio
+      - name: Descargar repositorio
         uses: actions/checkout@v4
 
-      - name: Configurar Node.js
+      - name: Configurar Node.js con caché
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
           cache: 'npm'
-          cache-dependency-path: './my-video/package-lock.json'
+          cache-dependency-path: my-video/package-lock.json
 
-      - name: Instalar FFmpeg y Edge-TTS
+      - name: Instalar dependencias del proyecto
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg python3-pip
-          pip3 install edge-tts
-
-      - name: Instalar dependencias de Remotion
-        run: npm ci || npm install
+          cd my-video
+          npm ci --prefer-offline
 
       - name: Generar imágenes, voz y renderizar video
+        working-directory: ./my-video
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
           AZURE_SPEECH_REGION: ${{ secrets.AZURE_SPEECH_REGION }}
         run: node crear-video-ia.mjs
@@ -44,6 +33,6 @@ jobs:
       - name: Subir video renderizado
         uses: actions/upload-artifact@v4
         with:
-          name: reel-punto-nemo
-          path: my-video/out/*.mp4
+          name: reel-kola
+          path: my-video/out/reel_azure_premium.mp4
           retention-days: 7
