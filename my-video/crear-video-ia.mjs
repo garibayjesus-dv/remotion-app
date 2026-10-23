@@ -1,19 +1,32 @@
 import fs from "fs";
 import { execSync } from "child_process";
 import getMP3Duration from "get-mp3-duration";
-import { InferenceClient } from "@huggingface/inference";
 import "dotenv/config";
 
-const HF_TOKEN = process.env.HF_TOKEN;
 const AZURE_KEY = process.env.AZURE_SPEECH_KEY;
 const AZURE_REGION = process.env.AZURE_SPEECH_REGION;
 
-if (!HF_TOKEN || !AZURE_KEY || !AZURE_REGION) {
-  console.error("❌ Faltan HF_TOKEN, AZURE_SPEECH_KEY o AZURE_SPEECH_REGION.");
+// Lista de cuentas de Cloudflare (puedes agregar más en el futuro si lo deseas)
+const CUENTAS_CF = [
+  {
+    nombre: "Cuenta 1 (Principal)",
+    id: process.env.CLOUDFLARE_ACCOUNT_ID,
+    token: process.env.CLOUDFLARE_API_TOKEN,
+  },
+  {
+    nombre: "Cuenta 2 (Respaldo)",
+    id: process.env.CLOUDFLARE_ACCOUNT_ID_2,
+    token: process.env.CLOUDFLARE_API_TOKEN_2,
+  },
+].filter((c) => c.id && c.token);
+
+if (CUENTAS_CF.length === 0 || !AZURE_KEY || !AZURE_REGION) {
+  console.error("❌ Faltan credenciales de Cloudflare o de Azure en las variables de entorno.");
   process.exit(1);
 }
 
-const hf = new InferenceClient(HF_TOKEN);
+// Índice para recordar qué cuenta está activa y no reintentar en una ya agotada
+let indiceCuentaActual = 0;
 
 const guion = [
   {
@@ -102,28 +115,40 @@ const guion = [
   }
 ];
 
-// GENERADOR MULTIPROVEEDOR OFICIAL DE HUGGING FACE
-async function generarImagenHuggingFace(prompt, outputPath) {
-  const proveedores = ["auto", "fal-ai", "together", "nscale"];
+// GENERADOR CLOUDFLARE CON ROTACIÓN AUTOMÁTICA DE CUENTAS
+async function generarImagenCloudflare(prompt, outputPath) {
+  while (indiceCuentaActual < CUENTAS_CF.length) {
+    const cuenta = CUENTAS_CF[indiceCuentaActual];
 
-  for (const provider of proveedores) {
     try {
-      const imageBlob = await hf.textToImage({
-        provider: provider,
-        model: "black-forest-labs/FLUX.1-schnell",
-        inputs: prompt,
-        parameters: { num_inference_steps: 4 },
-      });
+      const response = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${cuenta.id}/ai/run/@cf/black-forest-labs/flux-1-schnell`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${cuenta.token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ prompt: prompt, steps: 4 }),
+        }
+      );
 
-      const buffer = Buffer.from(await imageBlob.arrayBuffer());
-      fs.writeFileSync(outputPath, buffer);
-      return;
+      const data = await response.json();
+
+      if (data.success && data.result?.image) {
+        fs.writeFileSync(outputPath, Buffer.from(data.result.image, "base64"));
+        return;
+      }
+
+      console.warn(`⚠️ ${cuenta.nombre} agotada o con error (${JSON.stringify(data.errors)}). Cambiando a la siguiente cuenta...`);
+      indiceCuentaActual++;
     } catch (err) {
-      console.warn(`⚠️ Proveedor '${provider}' falló: ${err.message}. Probando siguiente...`);
+      console.warn(`⚠️ Error de red en ${cuenta.nombre}: ${err.message}. Cambiando a la siguiente cuenta...`);
+      indiceCuentaActual++;
     }
   }
 
-  throw new Error("No se pudo generar la imagen con ningún proveedor de Hugging Face.");
+  throw new Error("❌ Todas las cuentas de Cloudflare configuradas agotaron sus neuronas diarias.");
 }
 
 async function generarVozAzure(texto, outputPath) {
@@ -146,7 +171,7 @@ async function generarVozAzure(texto, outputPath) {
 }
 
 async function main() {
-  console.log("\n🚀 INICIANDO PRODUCCIÓN CON HUGGING FACE SDK (AUTO-PROVIDER) Y VOZ AZURE\n");
+  console.log(`\n🚀 INICIANDO PRODUCCIÓN CON ROTACIÓN CLOUDFLARE (${CUENTAS_CF.length} CUENTAS DISPONIBLES) Y VOZ AZURE\n`);
 
   const listaEscenas = Array.isArray(guion) ? guion : (guion.scenes || guion.escenas || []);
 
@@ -164,7 +189,7 @@ async function main() {
     const audioPath = `public/audio_scene_${i + 1}.mp3`;
     const imagePath = `public/${scene.imageFile}`;
 
-    await generarImagenHuggingFace(scene.imagePrompt, imagePath);
+    await generarImagenCloudflare(scene.imagePrompt, imagePath);
     await generarVozAzure(scene.text, audioPath);
 
     const durationSec = getMP3Duration(fs.readFileSync(audioPath)) / 1000;
@@ -186,4 +211,7 @@ async function main() {
   console.log("\n🎉 ¡Reel completado con éxito!");
 }
 
-main().catch(err => console.error("❌ Fallo en la ejecución:", err));
+main().catch(err => {
+  console.error("❌ Fallo en la ejecución:", err);
+  process.exit(1);
+});
