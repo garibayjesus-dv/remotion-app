@@ -135,11 +135,20 @@ async function generarVozAzure(texto, outputPath) {
 
 async function main() {
   console.log("\n🚀 INICIANDO PRODUCCIÓN CON IMÁGENES CLOUDFLARE Y VOZ AZURE PREMIUM\n");
+
+  // Soporta tanto array directo [...] como { scenes: [...] } o { escenas: [...] }
+  const listaEscenas = Array.isArray(guion) ? guion : (guion.scenes || guion.escenas || []);
+
+  if (!listaEscenas || listaEscenas.length === 0) {
+    console.error("❌ No se encontraron escenas válidas en el guion.");
+    process.exit(1);
+  }
+
   const processedScenes = [];
 
-  for (let i = 0; i < guion.scenes.length; i++) {
-    const scene = guion.scenes[i];
-    console.log(`[${i + 1}/${guion.scenes.length}] Procesando: "${scene.tag}"...`);
+  for (let i = 0; i < listaEscenas.length; i++) {
+    const scene = listaEscenas[i];
+    console.log(`[${i + 1}/${listaEscenas.length}] Procesando escena: "${scene.tag}"...`);
     
     const audioPath = `public/audio_scene_${i + 1}.mp3`;
     const imagePath = `public/${scene.imageFile}`;
@@ -150,9 +159,8 @@ async function main() {
     const durationSec = getMP3Duration(fs.readFileSync(audioPath)) / 1000;
     const totalFrames = Math.ceil(durationSec * 30) + 8;
 
-    // AQUI ESTA LA CORRECCIÓN EXACTA PARA QUE REMOTION NO FALLE
     processedScenes.push({ 
-      id: scene.id,
+      id: String(scene.id || i + 1),
       tag: scene.tag,
       image: scene.imageFile, 
       audioFile: `audio_scene_${i + 1}.mp3`, 
@@ -164,7 +172,7 @@ async function main() {
 
   console.log("\n🎬 Renderizando con Remotion en GitHub Actions...");
   execSync(`npx remotion render LongReel out/reel_azure_premium.mp4 --concurrency=1`, { stdio: "inherit" });
-  console.log("\n🎉 ¡Reel premium de 15 escenas completado!");
+  console.log("\n🎉 ¡Reel completado con éxito!");
 }
 
 main().catch(err => console.error("❌ Fallo en la ejecución:", err));
