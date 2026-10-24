@@ -73,7 +73,7 @@ Devuelve ÚNICAMENTE un arreglo JSON válido (sin texto adicional ni bloques mar
 Reglas obligatorias:
 - Exactamente 12 escenas numeradas del 1 al 12 ("ia_escena_1.jpg" a "ia_escena_12.jpg").
 - El campo "tone" debe ser uno de estos 4 valores según la emoción de la escena: "intriga", "serio", "impacto", "reflexion".
-- En "imagePrompt": Escribe un prompt en inglés detallado para FLUX.2-pro describiendo una escena cinematográfica clara con UN sujeto principal centrado. Prohibido pedir texto, letras o carteles.
+- En "imagePrompt": Escribe un prompt en inglés para FLUX.2-pro con UN sujeto u objeto centrado. REGLA DE SEGURIDAD AZURE: NUNCA uses palabras gráficas, violencia, cadáveres ni sangre (prohibido: blood, corpse, dead, cannibalism, bones, skull, gore, kill, weapon, torture). Si la escena trata algo trágico o macabro, describe una metáfora visual atmosférica y segura (ej: objetos abandonados en la tormenta, siluetas en la niebla, barco atrapado en el hielo).
 - Escena 1 ("tone": "intriga") debe ser un gancho impactante.
 - Escena 12 ("tone": "reflexion") debe cerrar con una reflexión profunda.`;
 
@@ -166,6 +166,9 @@ async function generarImagenIA(prompt, outputPath, numeroEscena) {
   // MOTOR #1: Microsoft Azure Foundry FLUX.2-pro (Calidad Estudio Pro en 9:16)
   if (AZURE_FOUNDRY_KEY) {
     for (let intento = 1; intento <= 3; intento++) {
+      const promptSeguro = intento === 1
+        ? promptFinal
+        : `Atmospheric cinematic vertical 9:16 shot inspired by ${TEMA}, mysterious abandoned scene, moody volumetric lighting, 35mm film grain, dark dramatic atmosphere, 8k, photorealistic, no text`;
       try {
         const resAz = await fetch(AZURE_FLUX_URL, {
           method: "POST",
@@ -175,7 +178,7 @@ async function generarImagenIA(prompt, outputPath, numeroEscena) {
             "api-key": AZURE_FOUNDRY_KEY.trim(),
           },
           body: JSON.stringify({
-            prompt: promptFinal,
+            prompt: promptSeguro,
             model: "FLUX.2-pro",
             width: 768,
             height: 1344,
