@@ -9,7 +9,6 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const AZURE_KEY = process.env.AZURE_SPEECH_KEY;
 const AZURE_REGION = process.env.AZURE_SPEECH_REGION;
 
-// Voz de locutor profesional (puedes cambiar a "es-ES-AlvaroNeural" o "es-MX-GerardoNeural" si quieres probar otro timbre)
 const VOZ_LOCUTOR = process.env.AZURE_VOICE || "es-MX-JorgeNeural";
 
 const CUENTAS_CF = [
@@ -25,8 +24,8 @@ const CUENTAS_CF = [
   },
 ].filter((c) => c.id && c.token);
 
-if (CUENTAS_CF.length === 0 || !AZURE_KEY || !AZURE_REGION) {
-  console.error("❌ Faltan credenciales de Cloudflare o de Azure en las variables de entorno.");
+if (!AZURE_KEY || !AZURE_REGION) {
+  console.error("❌ Faltan credenciales de Azure en las variables de entorno.");
   process.exit(1);
 }
 
@@ -75,9 +74,7 @@ Reglas obligatorias:
 - Escena 1 ("tone": "intriga") debe ser un gancho impactante en los primeros 3 segundos.
 - Escena 12 ("tone": "reflexion") debe cerrar con una reflexión profunda o pregunta inquietante.`;
 
-  // --------------------------------------------------
   // INTENTO 1: Google Gemini (gemini-3.8-flash prioritario)
-  // --------------------------------------------------
   if (GEMINI_API_KEY) {
     const modelosGemini = [
       "gemini-3.8-flash",
@@ -116,13 +113,9 @@ Reglas obligatorias:
         console.warn(`⚠️ Error al conectar con Gemini (${modelo}): ${e.message}`);
       }
     }
-  } else {
-    console.warn("⚠️ GEMINI_API_KEY no detectada. Pasando al siguiente motor de IA...");
   }
 
-  // --------------------------------------------------
   // INTENTO 2: GitHub Models (OpenAI GPT-4o gratis en GitHub Actions)
-  // --------------------------------------------------
   if (GITHUB_TOKEN) {
     try {
       console.log("🤖 Intentando generar guion con GitHub Models (OpenAI GPT-4o)...");
@@ -151,17 +144,13 @@ Reglas obligatorias:
           console.log(`✅ Guion generado con éxito con GitHub Models GPT-4o (${escenas.length} escenas).`);
           return escenas;
         }
-      } else {
-        console.warn(`⚠️ Aviso de GitHub Models: ${ghData.error?.message || JSON.stringify(ghData)}`);
       }
     } catch (e) {
-      console.warn(`⚠️ GitHub Models no disponible (${e.message}), usando respaldo de Cloudflare...`);
+      console.warn(`⚠️ GitHub Models no disponible (${e.message})...`);
     }
   }
 
-  // --------------------------------------------------
   // INTENTO 3: Respaldo con Cloudflare Workers AI
-  // --------------------------------------------------
   for (let i = 0; i < CUENTAS_CF.length; i++) {
     const cuenta = CUENTAS_CF[i];
     try {
@@ -182,7 +171,6 @@ Reglas obligatorias:
       });
 
       const data = await response.json();
-
       if (data.success && data.result?.response) {
         const escenas = extraerEscenas(data.result.response);
         if (escenas && escenas.length > 0) {
@@ -190,9 +178,8 @@ Reglas obligatorias:
           return escenas;
         }
       }
-      console.warn(`⚠️ ${cuenta.nombre} no devolvió guion válido. Cambiando de cuenta...`);
     } catch (err) {
-      console.warn(`⚠️ Error en ${cuenta.nombre}: ${err.message}. Cambiando de cuenta...`);
+      console.warn(`⚠️ Error en ${cuenta.nombre}: ${err.message}`);
     }
   }
 
@@ -200,14 +187,14 @@ Reglas obligatorias:
 }
 
 // ==========================================
-// 2. GENERADOR DE IMÁGENES ENCUADRE CENTRADO (FLUX 8 STEPS)
+// 2. GENERADOR DE IMÁGENES (CLOUDFLARE + FLUX VERTICAL 1080x1920 ILIMITADO)
 // ==========================================
-async function generarImagenCloudflare(prompt, outputPath) {
-  const promptMejorado = `centered vertical composition, main subject in the exact center of the frame, ${prompt}, masterpiece, photorealistic, cinematic lighting, dramatic shadows, sharp focus, 8k, no text, no letters, no watermark, natural anatomy`;
+async function generarImagenIA(prompt, outputPath) {
+  const promptMejorado = `centered vertical 9:16 composition, main subject in the exact center of the frame, ${prompt}, masterpiece, photorealistic, cinematic lighting, dramatic shadows, sharp focus, 8k, no text, no letters, no watermark, natural anatomy`;
 
+  // FUENTE 1: Cuentas de Cloudflare (Flux-1-Schnell 8 steps)
   while (indiceCuentaActual < CUENTAS_CF.length) {
     const cuenta = CUENTAS_CF[indiceCuentaActual];
-
     try {
       const response = await fetch(
         `https://api.cloudflare.com/client/v4/accounts/${cuenta.id}/ai/run/@cf/black-forest-labs/flux-1-schnell`,
@@ -217,29 +204,44 @@ async function generarImagenCloudflare(prompt, outputPath) {
             Authorization: `Bearer ${cuenta.token}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            prompt: promptMejorado,
-            steps: 8,
-          }),
+          body: JSON.stringify({ prompt: promptMejorado, steps: 8 }),
         }
       );
 
       const data = await response.json();
-
       if (data.success && data.result?.image) {
         fs.writeFileSync(outputPath, Buffer.from(data.result.image, "base64"));
         return;
       }
 
-      console.warn(`⚠️ ${cuenta.nombre} agotada para imágenes. Cambiando a la siguiente cuenta...`);
+      console.warn(`⚠️ ${cuenta.nombre} agotada hoy. Cambiando a siguiente fuente...`);
       indiceCuentaActual++;
     } catch (err) {
-      console.warn(`⚠️ Error en ${cuenta.nombre}: ${err.message}. Cambiando a la siguiente cuenta...`);
+      console.warn(`⚠️ Error en ${cuenta.nombre}: ${err.message}. Cambiando a siguiente fuente...`);
       indiceCuentaActual++;
     }
   }
 
-  throw new Error("❌ Todas las cuentas de Cloudflare agotaron sus neuronas diarias.");
+  // FUENTE 2: Motor Flux Vertical Nativo 1080x1920 (Ilimitado 24/7)
+  for (let intento = 1; intento <= 4; intento++) {
+    try {
+      const seed = Math.floor(Math.random() * 1000000);
+      const urlFlux = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptMejorado)}?width=1080&height=1920&seed=${seed}&model=flux&nologo=true`;
+      const res = await fetch(urlFlux);
+      if (res.ok) {
+        const buffer = Buffer.from(await res.arrayBuffer());
+        if (buffer.length > 5000) {
+          fs.writeFileSync(outputPath, buffer);
+          console.log("   🖼️ Imagen vertical 1080x1920 generada con Flux Ilimitado");
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn(`⚠️ Reintentando generación Flux Vertical (${intento}/4)...`);
+    }
+  }
+
+  throw new Error("❌ No se pudo generar la imagen en ninguna fuente disponible.");
 }
 
 // ==========================================
@@ -320,7 +322,7 @@ async function main() {
     const audioPath = `public/audio_scene_${i + 1}.mp3`;
     const imagePath = `public/${nombreImagen}`;
 
-    await generarImagenCloudflare(scene.imagePrompt, imagePath);
+    await generarImagenIA(scene.imagePrompt, imagePath);
     await generarVozAzure(scene.text, tonoEscena, audioPath);
 
     const durationSec = getMP3Duration(fs.readFileSync(audioPath)) / 1000;
@@ -338,7 +340,7 @@ async function main() {
 
   fs.writeFileSync("./guion_sincronizado.json", JSON.stringify({ scenes: processedScenes }, null, 2));
 
-  console.log("\n🎬 Renderizando con Remotion en modo Turbo Multi-Núcleo...");
+  console.log("\n🎬 Renderizando con Remotion en modo Turbo Multi-Núcleo (100%)...");
   execSync(`npx remotion render LongReel out/reel_azure_premium.mp4 --concurrency=100%`, { stdio: "inherit" });
   console.log("\n🎉 ¡Reel completado con éxito!");
 }
