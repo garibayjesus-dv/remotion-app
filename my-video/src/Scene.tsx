@@ -4,12 +4,14 @@ import {
   Audio,
   Img,
   interpolate,
+  Sequence,
+  spring,
   staticFile,
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
 import { noise2D } from "@remotion/noise";
-import { vineBoom, whoosh, whip } from "@remotion/sfx";
+import { vineBoom, whoosh, whip, pageTurn } from "@remotion/sfx";
 
 export interface SceneProps {
   index?: number;
@@ -21,7 +23,6 @@ export interface SceneProps {
   audioFile?: string;
 }
 
-// Generador determinista de partículas en 2 capas de profundidad (Parallax 2.5D)
 const CANTIDAD_PARTICULAS = 22;
 
 export const Scene: React.FC<SceneProps> = ({
@@ -33,7 +34,7 @@ export const Scene: React.FC<SceneProps> = ({
   audioFile,
 }) => {
   const frame = useCurrentFrame();
-  const { durationInFrames } = useVideoConfig();
+  const { fps, durationInFrames } = useVideoConfig();
 
   const progreso = interpolate(frame, [0, durationInFrames], [0, 1], {
     extrapolateLeft: "clamp",
@@ -66,18 +67,39 @@ export const Scene: React.FC<SceneProps> = ({
     baseRotate = interpolate(progreso, [0, 1], [1, -1]);
   }
 
-  // 2. Corte "Punch-In" a mitad de escena (duplica el dinamismo en escenas de impacto/intriga)
+  // 2. PASO 4: Corte "Punch-In" Profesional a mitad de escena con resorte + reencuadre
   const framePunchIn = Math.floor(durationInFrames * 0.52);
-  const aplicaPunchIn = tone === "impacto" || tone === "intriga" || index === 0;
-  const esDespuesDePunch = aplicaPunchIn && frame >= framePunchIn;
+  const aplicaPunchIn =
+    tone === "impacto" || tone === "intriga" || role !== "narrador" || index === 0;
 
-  const multiplicadorPunch = esDespuesDePunch ? 1.13 : 1.0;
-  const flashPunchIn = aplicaPunchIn
-    ? interpolate(frame, [framePunchIn - 1, framePunchIn, framePunchIn + 5], [0, 1.28, 1.0], {
+  const punchSpring = aplicaPunchIn
+    ? spring({
+        frame: frame - framePunchIn,
+        fps,
+        config: { damping: 14, stiffness: 220, mass: 0.4 },
+      })
+    : 0;
+
+  const multiplicadorPunch = 1 + punchSpring * 0.15;
+  const offsetPunchY = punchSpring * (index % 2 === 0 ? -14 : 12);
+
+  const blurPunchIn = aplicaPunchIn
+    ? interpolate(frame, [framePunchIn - 1, framePunchIn + 1, framePunchIn + 5], [0, 4.5, 0], {
         extrapolateLeft: "clamp",
         extrapolateRight: "clamp",
       })
-    : 1.0;
+    : 0;
+
+  const flashPunchIn = aplicaPunchIn
+    ? interpolate(frame, [framePunchIn - 1, framePunchIn, framePunchIn + 5], [1, 1.32, 1], {
+        extrapolateLeft: "clamp",
+        extrapolateRight: "clamp",
+      })
+    : 1;
+
+  // Parpadeo sutil de proyector de 16mm cuando habla el testigo
+  const flickerProyector =
+    role === "testigo" ? 1 + noise2D(`flicker-${index}`, frame * 0.35, 0) * 0.05 : 1;
 
   // 3. Cámara en mano orgánica con @remotion/noise
   const intensidadShake = tone === "impacto" ? 10 : tone === "intriga" ? 6 : 3.5;
@@ -116,7 +138,7 @@ export const Scene: React.FC<SceneProps> = ({
         ? "radial-gradient(circle at 20% 40%, rgba(251, 146, 60, 0.85) 0%, rgba(239, 68, 68, 0.35) 45%, rgba(0,0,0,0) 75%)"
         : "radial-gradient(circle at 80% 30%, rgba(56, 189, 248, 0.8) 0%, rgba(99, 102, 241, 0.35) 45%, rgba(0,0,0,0) 75%)";
 
-  // 6. Estética de color según la voz que habla (Narrador vs Testigo vs Archivo Forense)
+  // 6. Estética de color según la voz que habla
   const filtroPorRol =
     role === "testigo"
       ? "sepia(0.24) contrast(1.14) saturate(0.95)"
@@ -150,18 +172,48 @@ export const Scene: React.FC<SceneProps> = ({
       : staticFile(prevImage)
     : null;
 
-  const sfxTransicion = index === 0 ? vineBoom : index % 3 === 0 ? whip : whoosh;
+  const sfxTransicion =
+    index === 0 ? vineBoom : role === "testigo" ? pageTurn : index % 3 === 0 ? whip : whoosh;
   const volumenSfx = index === 0 ? 0.22 : 0.13;
+
+  // 8. PASO 5: Sello minimalista tipo Netflix arriba (solo primeros 2.5s en Testigo / Archivo)
+  const textoSello =
+    role === "testigo"
+      ? "REGISTRO TESTIMONIAL // BITÁCORA"
+      : role === "archivo"
+        ? "EVIDENCIA FORENSE // EXPEDIENTE"
+        : null;
+
+  const caracteresVisibles = textoSello
+    ? Math.floor(
+        interpolate(frame, [4, 34], [0, textoSello.length], {
+          extrapolateLeft: "clamp",
+          extrapolateRight: "clamp",
+        })
+      )
+    : 0;
+
+  const opacidadSello = interpolate(frame, [0, 8, 65, 78], [0, 0.9, 0.9, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#000000", overflow: "hidden" }}>
       {/* 1. Audio de la locución de esta escena */}
       {audioFile && <Audio src={staticFile(audioFile)} volume={1.0} />}
 
-      {/* 2. Efecto de sonido oficial de @remotion/sfx */}
+      {/* 2. Efecto de sonido al iniciar la escena */}
       <Audio src={sfxTransicion} volume={volumenSfx} />
 
-      {/* 3. Imagen principal con Ken Burns + Punch-In + Cámara en Mano */}
+      {/* 3. Efecto de sonido sincronizado con el corte Punch-In a mitad de escena */}
+      {aplicaPunchIn && durationInFrames > 45 && (
+        <Sequence from={framePunchIn}>
+          <Audio src={whoosh} volume={0.08} />
+        </Sequence>
+      )}
+
+      {/* 4. Imagen principal con Ken Burns + Punch-In Elástico + Cámara en Mano */}
       <Img
         src={imageSrc}
         style={{
@@ -169,12 +221,12 @@ export const Scene: React.FC<SceneProps> = ({
           width: "100%",
           height: "100%",
           objectFit: "cover",
-          transform: `scale(${baseScale * multiplicadorPunch}) translate(${baseX + shakeX}px, ${baseY + shakeY}px) rotate(${baseRotate + shakeRot}deg)`,
-          filter: `blur(${blurEntrada}px) brightness(${ 1.02 * flashPunchIn }) ${filtroPorRol}`,
+          transform: `scale(${baseScale * multiplicadorPunch}) translate(${baseX + shakeX}px, ${baseY + shakeY + offsetPunchY}px) rotate(${baseRotate + shakeRot}deg)`,
+          filter: `blur(${blurEntrada + blurPunchIn}px) brightness(${1.02 * flashPunchIn * flickerProyector}) ${filtroPorRol}`,
         }}
       />
 
-      {/* 4. Capa de Partículas Flotantes 2.5D Parallax */}
+      {/* 5. Capa de Partículas Flotantes 2.5D Parallax */}
       <AbsoluteFill style={{ pointerEvents: "none" }}>
         {particulas.map((p) => {
           const derivaX = noise2D(`px-${index}-${p.id}`, frame * 0.015, 0) * 35;
@@ -206,7 +258,7 @@ export const Scene: React.FC<SceneProps> = ({
         })}
       </AbsoluteFill>
 
-      {/* 5. Cross-fade con la escena anterior (superposición suave de 14 frames) */}
+      {/* 6. Cross-fade con la escena anterior */}
       {prevImageSrc && frame < 14 && (
         <Img
           src={prevImageSrc}
@@ -222,7 +274,7 @@ export const Scene: React.FC<SceneProps> = ({
         />
       )}
 
-      {/* 6. Light Leak (Destello de lente cinematográfico en cada transición) */}
+      {/* 7. Light Leak (Destello de lente cinematográfico en cada transición) */}
       {frame < 18 && (
         <AbsoluteFill
           style={{
@@ -233,7 +285,7 @@ export const Scene: React.FC<SceneProps> = ({
         />
       )}
 
-      {/* 7. Iluminación volumétrica sutil en movimiento */}
+      {/* 8. Iluminación volumétrica sutil en movimiento */}
       <AbsoluteFill
         style={{
           background:
@@ -245,7 +297,7 @@ export const Scene: React.FC<SceneProps> = ({
         }}
       />
 
-      {/* 8. Viñeta radial oscura de documental */}
+      {/* 9. Viñeta radial oscura de documental */}
       <AbsoluteFill
         style={{
           background:
@@ -253,13 +305,45 @@ export const Scene: React.FC<SceneProps> = ({
         }}
       />
 
-      {/* 9. Sombras superior e inferior para dar profundidad */}
+      {/* 10. Sombras superior e inferior para dar profundidad */}
       <AbsoluteFill
         style={{
           background:
             "linear-gradient(180deg, rgba(0,0,0,0.48) 0%, rgba(0,0,0,0) 20%, rgba(0,0,0,0) 75%, rgba(0,0,0,0.75) 100%)",
         }}
       />
+
+      {/* 11. PASO 5: Sello minimalista tipo Netflix (solo aparece 2.5s arriba en Testigo / Archivo) */}
+      {textoSello && frame < 78 && (
+        <div
+          style={{
+            position: "absolute",
+            top: "85px",
+            left: "65px",
+            opacity: opacidadSello,
+            display: "flex",
+            alignItems: "center",
+            gap: "14px",
+            fontFamily: "monospace",
+            fontSize: "24px",
+            fontWeight: 700,
+            letterSpacing: "3px",
+            color: role === "testigo" ? "#fde68a" : "#7dd3fc",
+            textShadow: "0 2px 12px rgba(0,0,0,0.9)",
+          }}
+        >
+          <div
+            style={{
+              width: "12px",
+              height: "12px",
+              borderRadius: "50%",
+              backgroundColor: role === "testigo" ? "#f59e0b" : "#ef4444",
+              boxShadow: "0 0 12px currentColor",
+            }}
+          />
+          <span>{textoSello.slice(0, caracteresVisibles)}</span>
+        </div>
+      )}
     </AbsoluteFill>
   );
 };
