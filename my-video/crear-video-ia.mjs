@@ -5,11 +5,13 @@ import "dotenv/config";
 
 const TEMA = process.env.TEMA_VIDEO || "El misterio del Pozo Superprofundo de Kola";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const AZURE_FOUNDRY_KEY = process.env.AZURE_FOUNDRY_KEY;
 const AZURE_KEY = process.env.AZURE_SPEECH_KEY;
 const AZURE_REGION = process.env.AZURE_SPEECH_REGION;
-
 const VOZ_LOCUTOR = process.env.AZURE_VOICE || "es-MX-JorgeNeural";
+
+const AZURE_FLUX_URL =
+  "https://reels-foundry-ia.services.ai.azure.com/providers/blackforestlabs/v1/flux-2-pro?api-version=preview";
 
 const CUENTAS_CF = [
   {
@@ -25,11 +27,12 @@ const CUENTAS_CF = [
 ].filter((c) => c.id && c.token);
 
 if (!AZURE_KEY || !AZURE_REGION) {
-  console.error("❌ Faltan credenciales de Azure en las variables de entorno.");
+  console.error("❌ Faltan credenciales de Azure Speech en las variables de entorno.");
   process.exit(1);
 }
 
 let indiceCuentaActual = 0;
+const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function extraerEscenas(respuesta) {
   if (Array.isArray(respuesta)) return respuesta;
@@ -48,7 +51,7 @@ function extraerEscenas(respuesta) {
 }
 
 // ==========================================
-// 1. GENERADOR DE GUION (GEMINI 3.8 + GITHUB MODELS GPT-4O + CF)
+// 1. GENERADOR DE GUION (10 MODELOS GEMINI + RESPALDO CF)
 // ==========================================
 async function generarGuionAutomatico(tema) {
   console.log(`🧠 Escribiendo guion viral de 12 escenas sobre: "${tema}"...`);
@@ -63,18 +66,17 @@ Devuelve ÚNICAMENTE un arreglo JSON válido (sin texto adicional ni bloques mar
     "tag": "GANCHO",
     "tone": "intriga",
     "text": "Narración en español neutro de 20 a 26 palabras. Usa signos de interrogación, exclamación y puntos suspensivos (...) para crear suspenso y pausas dramáticas. Escribe todos los números con letras.",
-    "imagePrompt": "Centered vertical 9:16 composition, main subject strictly in the center of the frame, medium-wide cinematic shot for FLUX.1, hyperrealistic, moody volumetric lighting, 35mm film grain, dark atmospheric color grading, 8k, no text, no letters, no watermarks",
+    "imagePrompt": "Vertical 9:16 cinematic shot, main subject in center, hyperrealistic, moody volumetric lighting, 35mm film, dark atmosphere, 8k, no text",
     "imageFile": "ia_escena_1.jpg"
   }
 ]
 Reglas obligatorias:
 - Exactamente 12 escenas numeradas del 1 al 12 ("ia_escena_1.jpg" a "ia_escena_12.jpg").
 - El campo "tone" debe ser uno de estos 4 valores según la emoción de la escena: "intriga", "serio", "impacto", "reflexion".
-- En "imagePrompt": Describe escenas visuales claras con UN sujeto u objeto principal centrado en la imagen. NUNCA pidas texto, carteles, mapas con letras ni manos en primer plano.
-- Escena 1 ("tone": "intriga") debe ser un gancho impactante en los primeros 3 segundos.
-- Escena 12 ("tone": "reflexion") debe cerrar con una reflexión profunda o pregunta inquietante.`;
+- En "imagePrompt": Escribe un prompt en inglés detallado para FLUX.2-pro describiendo una escena cinematográfica clara con UN sujeto principal centrado. Prohibido pedir texto, letras o carteles.
+- Escena 1 ("tone": "intriga") debe ser un gancho impactante.
+- Escena 12 ("tone": "reflexion") debe cerrar con una reflexión profunda.`;
 
-  // INTENTO 1: Google Gemini (gemini-3.8-flash prioritario)
   if (GEMINI_API_KEY) {
     const modelosGemini = [
       "gemini-3.8-flash",
@@ -97,10 +99,7 @@ Reglas obligatorias:
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contents: [{ parts: [{ text: promptSistema }] }],
-            generationConfig: {
-              responseMimeType: "application/json",
-              temperature: 0.7,
-            },
+            generationConfig: { temperature: 0.7 },
           }),
         });
 
@@ -114,50 +113,15 @@ Reglas obligatorias:
           }
         } else {
           console.warn(`⚠️ Aviso de Gemini API (${modelo}): ${data.error?.message || JSON.stringify(data)}`);
-          await new Promise((r) => setTimeout(r, 2500));
+          await esperar(2500);
         }
       } catch (e) {
         console.warn(`⚠️ Error al conectar con Gemini (${modelo}): ${e.message}`);
+        await esperar(2000);
       }
     }
   }
 
-  // INTENTO 2: GitHub Models (OpenAI GPT-4o gratis en GitHub Actions)
-  if (GITHUB_TOKEN) {
-    try {
-      console.log("🤖 Intentando generar guion con GitHub Models (OpenAI GPT-4o)...");
-      const ghRes = await fetch("https://models.github.ai/inference/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${GITHUB_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "openai/gpt-4o",
-          messages: [
-            { role: "system", content: "Devuelve únicamente un arreglo JSON válido de 12 escenas sin bloques markdown." },
-            { role: "user", content: promptSistema },
-          ],
-          temperature: 0.7,
-          max_tokens: 3800,
-        }),
-      });
-
-      const ghData = await ghRes.json();
-      if (ghRes.ok) {
-        const contenido = ghData?.choices?.[0]?.message?.content;
-        const escenas = extraerEscenas(contenido);
-        if (escenas && escenas.length > 0) {
-          console.log(`✅ Guion generado con éxito con GitHub Models GPT-4o (${escenas.length} escenas).`);
-          return escenas;
-        }
-      }
-    } catch (e) {
-      console.warn(`⚠️ GitHub Models no disponible (${e.message})...`);
-    }
-  }
-
-  // INTENTO 3: Respaldo con Cloudflare Workers AI
   for (let i = 0; i < CUENTAS_CF.length; i++) {
     const cuenta = CUENTAS_CF[i];
     try {
@@ -194,12 +158,48 @@ Reglas obligatorias:
 }
 
 // ==========================================
-// 2. GENERADOR DE IMÁGENES (CLOUDFLARE + FLUX VERTICAL 1080x1920 ILIMITADO)
+// 2. GENERADOR DE IMÁGENES PRINCIPAL: AZURE FLUX.2-PRO VERTICAL (768x1344)
 // ==========================================
-async function generarImagenIA(prompt, outputPath) {
-  const promptMejorado = `centered vertical 9:16 composition, main subject in the exact center of the frame, ${prompt}, masterpiece, photorealistic, cinematic lighting, dramatic shadows, sharp focus, 8k, no text, no letters, no watermark, natural anatomy`;
+async function generarImagenIA(prompt, outputPath, numeroEscena) {
+  const promptFinal = `${prompt}, masterpiece, photorealistic, vertical 9:16 composition, dramatic volumetric lighting, 35mm film grain, sharp focus, 8k, no text, no watermark, natural anatomy`;
 
-  // FUENTE 1: Cuentas de Cloudflare (Flux-1-Schnell 8 steps)
+  // MOTOR #1: Microsoft Azure Foundry FLUX.2-pro (Calidad Estudio Pro en 9:16)
+  if (AZURE_FOUNDRY_KEY) {
+    for (let intento = 1; intento <= 3; intento++) {
+      try {
+        const resAz = await fetch(AZURE_FLUX_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${AZURE_FOUNDRY_KEY.trim()}`,
+            "api-key": AZURE_FOUNDRY_KEY.trim(),
+          },
+          body: JSON.stringify({
+            prompt: promptFinal,
+            model: "FLUX.2-pro",
+            width: 768,
+            height: 1344,
+            n: 1,
+          }),
+        });
+
+        const dataAz = await resAz.json();
+        if (resAz.ok && dataAz?.data?.[0]?.b64_json) {
+          fs.writeFileSync(outputPath, Buffer.from(dataAz.data[0].b64_json, "base64"));
+          console.log(`   🖼️ Imagen vertical 9:16 generada con Azure FLUX.2-pro`);
+          return;
+        } else {
+          console.warn(`   ⚠️ Aviso Azure FLUX.2-pro (intento ${intento}/3): ${dataAz?.error?.message || resAz.status}`);
+          await esperar(2000 * intento);
+        }
+      } catch (err) {
+        console.warn(`   ⚠️ Error de red Azure FLUX.2-pro (intento ${intento}/3): ${err.message}`);
+        await esperar(2000 * intento);
+      }
+    }
+  }
+
+  // MOTOR #2 (Respaldo): Cuentas de Cloudflare
   while (indiceCuentaActual < CUENTAS_CF.length) {
     const cuenta = CUENTAS_CF[indiceCuentaActual];
     try {
@@ -211,44 +211,23 @@ async function generarImagenIA(prompt, outputPath) {
             Authorization: `Bearer ${cuenta.token}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ prompt: promptMejorado, steps: 8 }),
+          body: JSON.stringify({ prompt: promptFinal, steps: 8 }),
         }
       );
 
       const data = await response.json();
       if (data.success && data.result?.image) {
         fs.writeFileSync(outputPath, Buffer.from(data.result.image, "base64"));
+        console.log(`   🖼️ Imagen generada con respaldo ${cuenta.nombre}`);
         return;
       }
-
-      console.warn(`⚠️ ${cuenta.nombre} agotada hoy. Cambiando a siguiente fuente...`);
       indiceCuentaActual++;
     } catch (err) {
-      console.warn(`⚠️ Error en ${cuenta.nombre}: ${err.message}. Cambiando a siguiente fuente...`);
       indiceCuentaActual++;
     }
   }
 
-  // FUENTE 2: Motor Flux Vertical Nativo 1080x1920 (Ilimitado 24/7)
-  for (let intento = 1; intento <= 4; intento++) {
-    try {
-      const seed = Math.floor(Math.random() * 1000000);
-      const urlFlux = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptMejorado)}?width=1080&height=1920&seed=${seed}&model=flux&nologo=true`;
-      const res = await fetch(urlFlux);
-      if (res.ok) {
-        const buffer = Buffer.from(await res.arrayBuffer());
-        if (buffer.length > 5000) {
-          fs.writeFileSync(outputPath, buffer);
-          console.log("   🖼️ Imagen vertical 1080x1920 generada con Flux Ilimitado");
-          return;
-        }
-      }
-    } catch (err) {
-      console.warn(`⚠️ Reintentando generación Flux Vertical (${intento}/4)...`);
-    }
-  }
-
-  throw new Error("❌ No se pudo generar la imagen en ninguna fuente disponible.");
+  throw new Error(`❌ No se pudo generar la imagen de la escena ${numeroEscena}.`);
 }
 
 // ==========================================
@@ -329,7 +308,7 @@ async function main() {
     const audioPath = `public/audio_scene_${i + 1}.mp3`;
     const imagePath = `public/${nombreImagen}`;
 
-    await generarImagenIA(scene.imagePrompt, imagePath);
+    await generarImagenIA(scene.imagePrompt, imagePath, i + 1);
     await generarVozAzure(scene.text, tonoEscena, audioPath);
 
     const durationSec = getMP3Duration(fs.readFileSync(audioPath)) / 1000;
