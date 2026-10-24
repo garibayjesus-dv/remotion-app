@@ -8,7 +8,13 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const AZURE_FOUNDRY_KEY = process.env.AZURE_FOUNDRY_KEY;
 const AZURE_KEY = process.env.AZURE_SPEECH_KEY;
 const AZURE_REGION = process.env.AZURE_SPEECH_REGION;
-const VOZ_LOCUTOR = process.env.AZURE_VOICE || "es-MX-JorgeNeural";
+
+// Elenco de voces estilo Documental de Netflix
+const VOCES_DOCUMENTAL = {
+  narrador: { nombre: "es-MX-JorgeNeural", lang: "es-MX", etiqueta: "🎙️ Narrador" },
+  testigo:  { nombre: "es-ES-AlvaroNeural", lang: "es-ES", etiqueta: "📜 Voz de Testigo/Diario" },
+  archivo:  { nombre: "es-MX-DaliaNeural", lang: "es-MX", etiqueta: "📁 Voz de Expediente/Forense" },
+};
 
 const AZURE_FLUX_URL =
   "https://reels-foundry-ia.services.ai.azure.com/providers/blackforestlabs/v1/flux-2-pro?api-version=preview";
@@ -51,12 +57,12 @@ function extraerEscenas(respuesta) {
 }
 
 // ==========================================
-// 1. GENERADOR DE GUION (10 MODELOS GEMINI + RESPALDO CF)
+// 1. GENERADOR DE GUION MULTI-VOZ (GEMINI 3.8 + RESPALDOS)
 // ==========================================
 async function generarGuionAutomatico(tema) {
-  console.log(`🧠 Escribiendo guion viral de 12 escenas sobre: "${tema}"...`);
+  console.log(`🧠 Escribiendo guion documental multi-voz de 12 escenas sobre: "${tema}"...`);
 
-  const promptSistema = `Actúa como director y guionista experto en documentales cortos y Reels virales de misterio, ciencia e historia de altísima retención.
+  const promptSistema = `Actúa como director de documentales de Netflix y guionista experto en Reels virales de misterio, ciencia e historia de altísima retención.
 Escribe un guion de exactamente 12 escenas sobre el tema: "${tema}".
 
 Devuelve ÚNICAMENTE un arreglo JSON válido (sin texto adicional ni bloques markdown) con esta estructura exacta:
@@ -64,18 +70,23 @@ Devuelve ÚNICAMENTE un arreglo JSON válido (sin texto adicional ni bloques mar
   {
     "id": "1",
     "tag": "GANCHO",
+    "role": "narrador",
     "tone": "intriga",
     "text": "Narración en español neutro de 20 a 26 palabras. Usa signos de interrogación, exclamación y puntos suspensivos (...) para crear suspenso y pausas dramáticas. Escribe todos los números con letras.",
     "imagePrompt": "Vertical 9:16 cinematic shot, main subject in center, hyperrealistic, moody volumetric lighting, 35mm film, dark atmosphere, 8k, no text",
     "imageFile": "ia_escena_1.jpg"
   }
 ]
-Reglas obligatorias:
+Reglas obligatorias de Dirección Documental Multi-Voz:
 - Exactamente 12 escenas numeradas del 1 al 12 ("ia_escena_1.jpg" a "ia_escena_12.jpg").
-- El campo "tone" debe ser uno de estos 4 valores según la emoción de la escena: "intriga", "serio", "impacto", "reflexion".
-- En "imagePrompt": Escribe un prompt en inglés para FLUX.2-pro con UN sujeto u objeto centrado. REGLA DE SEGURIDAD AZURE: NUNCA uses palabras gráficas, violencia, cadáveres ni sangre (prohibido: blood, corpse, dead, cannibalism, bones, skull, gore, kill, weapon, torture). Si la escena trata algo trágico o macabro, describe una metáfora visual atmosférica y segura (ej: objetos abandonados en la tormenta, siluetas en la niebla, barco atrapado en el hielo).
-- Escena 1 ("tone": "intriga") debe ser un gancho impactante.
-- Escena 12 ("tone": "reflexion") debe cerrar con una reflexión profunda.`;
+- El campo "role" define qué voz hablará en esa escena y DEBE usar uno de estos 3 valores:
+  1. "narrador": El locutor principal (úsalo en 9 de las 12 escenas, incluyendo siempre la escena 1 y la 12).
+  2. "testigo": Voz dramática en primera persona que lee un fragmento de diario antiguo, bitácora, carta, grabación o testimonio real del caso (úsalo en 2 escenas clave, por ejemplo escena 4 y escena 9). La escena anterior del "narrador" debe dar pie a esa cita.
+  3. "archivo": Voz clínica/investigadora que revela el dato forense, científico o informe oficial más perturbador (úsalo en 1 escena clave, por ejemplo escena 7 u 8).
+- El campo "tone" debe ser uno de estos 4 valores según la emoción: "intriga", "serio", "impacto", "reflexion".
+- En "imagePrompt": Escribe un prompt en inglés para FLUX.2-pro con UN sujeto u objeto centrado. REGLA DE SEGURIDAD AZURE: NUNCA uses palabras gráficas, violencia, cadáveres ni sangre (prohibido: blood, corpse, dead, cannibalism, bones, skull, gore, kill, weapon, torture). Si la escena trata algo trágico, describe una metáfora visual atmosférica y segura.
+- Escena 1 ("role": "narrador", "tone": "intriga") debe ser un gancho impactante.
+- Escena 12 ("role": "narrador", "tone": "reflexion") debe cerrar con una reflexión profunda.`;
 
   if (GEMINI_API_KEY) {
     const modelosGemini = [
@@ -108,7 +119,7 @@ Reglas obligatorias:
           const textoJson = data?.candidates?.[0]?.content?.parts?.[0]?.text;
           const escenas = extraerEscenas(textoJson);
           if (escenas && escenas.length > 0) {
-            console.log(`✅ Guion generado con éxito con Google Gemini (${modelo} - ${escenas.length} escenas).`);
+            console.log(`✅ Guion Multi-Voz generado con Google Gemini (${modelo} - ${escenas.length} escenas).`);
             return escenas;
           }
         } else {
@@ -145,7 +156,7 @@ Reglas obligatorias:
       if (data.success && data.result?.response) {
         const escenas = extraerEscenas(data.result.response);
         if (escenas && escenas.length > 0) {
-          console.log(`✅ Guion generado con éxito usando ${cuenta.nombre} (${escenas.length} escenas).`);
+          console.log(`✅ Guion generado usando ${cuenta.nombre} (${escenas.length} escenas).`);
           return escenas;
         }
       }
@@ -163,12 +174,12 @@ Reglas obligatorias:
 async function generarImagenIA(prompt, outputPath, numeroEscena) {
   const promptFinal = `${prompt}, masterpiece, photorealistic, vertical 9:16 composition, dramatic volumetric lighting, 35mm film grain, sharp focus, 8k, no text, no watermark, natural anatomy`;
 
-  // MOTOR #1: Microsoft Azure Foundry FLUX.2-pro (Calidad Estudio Pro en 9:16)
   if (AZURE_FOUNDRY_KEY) {
     for (let intento = 1; intento <= 3; intento++) {
-      const promptSeguro = intento === 1
-        ? promptFinal
-        : `Atmospheric cinematic vertical 9:16 shot inspired by ${TEMA}, mysterious abandoned scene, moody volumetric lighting, 35mm film grain, dark dramatic atmosphere, 8k, photorealistic, no text`;
+      const promptSeguro =
+        intento === 1
+          ? promptFinal
+          : `Atmospheric cinematic vertical 9:16 shot inspired by ${TEMA}, mysterious abandoned scene, moody volumetric lighting, 35mm film grain, dark dramatic atmosphere, 8k, photorealistic, no text`;
       try {
         const resAz = await fetch(AZURE_FLUX_URL, {
           method: "POST",
@@ -202,7 +213,6 @@ async function generarImagenIA(prompt, outputPath, numeroEscena) {
     }
   }
 
-  // MOTOR #2 (Respaldo): Cuentas de Cloudflare
   while (indiceCuentaActual < CUENTAS_CF.length) {
     const cuenta = CUENTAS_CF[indiceCuentaActual];
     try {
@@ -234,7 +244,7 @@ async function generarImagenIA(prompt, outputPath, numeroEscena) {
 }
 
 // ==========================================
-// 3. LOCUCIÓN CALIDAD ESTUDIO HD + EXPRESIONES (SSML)
+// 3. LOCUCIÓN MULTI-VOZ CALIDAD ESTUDIO HD + EXPRESIONES (SSML)
 // ==========================================
 function escaparXml(texto) {
   return texto
@@ -245,8 +255,10 @@ function escaparXml(texto) {
     .replace(/'/g, "&apos;");
 }
 
-async function generarVozAzure(texto, tono = "serio", outputPath) {
+async function generarVozAzure(texto, tono = "serio", rol = "narrador", outputPath) {
   const url = `https://${AZURE_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`;
+
+  const infoVoz = VOCES_DOCUMENTAL[rol] || VOCES_DOCUMENTAL.narrador;
 
   const configuracionTono = {
     intriga:   { style: "whispering", styledegree: "0.65", rate: "+4%", pitch: "-4%" },
@@ -257,19 +269,30 @@ async function generarVozAzure(texto, tono = "serio", outputPath) {
 
   const cfg = configuracionTono[tono] || configuracionTono.serio;
 
+  // Si es voz de "testigo" (AlvaroNeural), le damos una cadencia solemne y profunda de diario antiguo
+  const rateFinal = rol === "testigo" ? "-3%" : rol === "archivo" ? "+3%" : cfg.rate;
+  const pitchFinal = rol === "testigo" ? "-7%" : rol === "archivo" ? "-2%" : cfg.pitch;
+
   const textoConPausas = escaparXml(texto)
     .replace(/\.\.\./g, '<break time="450ms"/>')
     .replace(/\. /g, '. <break time="300ms"/>')
     .replace(/\? /g, '? <break time="350ms"/>')
     .replace(/! /g, '! <break time="350ms"/>');
 
-  const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="es-MX">
-    <voice name="${VOZ_LOCUTOR}">
-      <mstts:express-as style="${cfg.style}" styledegree="${cfg.styledegree}">
-        <prosody rate="${cfg.rate}" pitch="${cfg.pitch}">
-          ${textoConPausas}
-        </prosody>
-      </mstts:express-as>
+  const cuerpoVoz =
+    rol === "narrador"
+      ? `<mstts:express-as style="${cfg.style}" styledegree="${cfg.styledegree}">
+          <prosody rate="${rateFinal}" pitch="${pitchFinal}">
+            ${textoConPausas}
+          </prosody>
+        </mstts:express-as>`
+      : `<prosody rate="${rateFinal}" pitch="${pitchFinal}">
+          <break time="200ms"/>${textoConPausas}
+        </prosody>`;
+
+  const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="${infoVoz.lang}">
+    <voice name="${infoVoz.nombre}">
+      ${cuerpoVoz}
     </voice>
   </speak>`;
 
@@ -295,7 +318,7 @@ async function generarVozAzure(texto, tono = "serio", outputPath) {
 // 4. FLUJO PRINCIPAL
 // ==========================================
 async function main() {
-  console.log(`\n🚀 INICIANDO FÁBRICA AUTOMÁTICA DE REELS`);
+  console.log(`\n🚀 INICIANDO FÁBRICA AUTOMÁTICA DE REELS (MODO DOCUMENTAL MULTI-VOZ)`);
   console.log(`📌 Tema seleccionado: "${TEMA}"\n`);
 
   const listaEscenas = await generarGuionAutomatico(TEMA);
@@ -305,14 +328,17 @@ async function main() {
     const scene = listaEscenas[i];
     const nombreImagen = `ia_escena_${i + 1}.jpg`;
     const tonoEscena = scene.tone || (i === 0 ? "intriga" : i === listaEscenas.length - 1 ? "reflexion" : "serio");
+    const rolEscena = scene.role && VOCES_DOCUMENTAL[scene.role] ? scene.role : "narrador";
 
-    console.log(`[${i + 1}/${listaEscenas.length}] Procesando escena: "${scene.tag}" (Tono: ${tonoEscena})...`);
+    console.log(
+      `[${i + 1}/${listaEscenas.length}] Escena: "${scene.tag}" | ${VOCES_DOCUMENTAL[rolEscena].etiqueta} | Tono: ${tonoEscena}`
+    );
 
     const audioPath = `public/audio_scene_${i + 1}.mp3`;
     const imagePath = `public/${nombreImagen}`;
 
     await generarImagenIA(scene.imagePrompt, imagePath, i + 1);
-    await generarVozAzure(scene.text, tonoEscena, audioPath);
+    await generarVozAzure(scene.text, tonoEscena, rolEscena, audioPath);
 
     const durationSec = getMP3Duration(fs.readFileSync(audioPath)) / 1000;
     const totalFrames = Math.ceil(durationSec * 30) + 8;
@@ -320,6 +346,7 @@ async function main() {
     processedScenes.push({
       id: String(i + 1),
       tag: scene.tag || `ESCENA ${i + 1}`,
+      role: rolEscena,
       tone: tonoEscena,
       image: nombreImagen,
       audioFile: `audio_scene_${i + 1}.mp3`,
@@ -330,7 +357,7 @@ async function main() {
   fs.writeFileSync("./guion_sincronizado.json", JSON.stringify({ scenes: processedScenes }, null, 2));
 
   console.log("\n🎬 Renderizando con Remotion en modo Turbo Multi-Núcleo (100%)...");
-  execSync(`npx remotion render LongReel out/reel_azure_premium.mp4 --concurrency=100%`, { stdio: "inherit" });
+  execSync(`npx remotion render LongReel out/reel_azure_premium.mp4 --concurrency=100% --crf=23`, { stdio: "inherit" });
   console.log("\n🎉 ¡Reel completado con éxito!");
 }
 
