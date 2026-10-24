@@ -5,10 +5,22 @@ import "dotenv/config";
 
 const TEMA = process.env.TEMA_VIDEO || "El misterio del Pozo Superprofundo de Kola";
 const FORMATO_INPUT = (process.env.FORMATO_VIDEO || "auto").toLowerCase().trim();
+const MOTOR_VOZ = (process.env.MOTOR_VOZ || "fish_drama3").toLowerCase().trim();
+
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const AZURE_FOUNDRY_KEY = process.env.AZURE_FOUNDRY_KEY;
 const AZURE_KEY = process.env.AZURE_SPEECH_KEY;
 const AZURE_REGION = process.env.AZURE_SPEECH_REGION;
+
+const FISH_API_KEY = (process.env.FISH_API_KEY || "").replace(/["']/g, "").trim();
+const RAW_FISH_VOICE = (process.env.FISH_VOICE_OVERRIDE || process.env.FISH_VOICE_ID || "")
+  .replace(/["']/g, "")
+  .trim();
+
+// Extrae automáticamente el ID limpio aunque el usuario pegue la URL completa de Fish Audio
+const FISH_VOICE_ID = RAW_FISH_VOICE.includes("/m/")
+  ? RAW_FISH_VOICE.split("/m/")[1].split("/")[0].split("?")[0]
+  : RAW_FISH_VOICE;
 
 const VOCES_DOCUMENTAL = {
   narrador: { nombre: "es-MX-JorgeNeural", lang: "es-MX", etiqueta: "🎙️ Narrador Principal" },
@@ -32,15 +44,9 @@ const CUENTAS_CF = [
   },
 ].filter((c) => c.id && c.token);
 
-if (!AZURE_KEY || !AZURE_REGION) {
-  console.error("❌ Faltan credenciales de Azure Speech en las variables de entorno.");
-  process.exit(1);
-}
-
 let indiceCuentaActual = 0;
 const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Detector automático de formato cuando el usuario deja la opción en "auto"
 function resolverFormato(tema, formatoElegido) {
   if (formatoElegido && formatoElegido !== "auto") return formatoElegido;
   const t = tema.toLowerCase();
@@ -59,7 +65,6 @@ function resolverFormato(tema, formatoElegido) {
   return "documental";
 }
 
-// Configuraciones dedicadas por formato (sin mezclar reglas)
 const CONFIG_FORMATOS = {
   documental: {
     numEscenas: 12,
@@ -76,13 +81,12 @@ const CONFIG_FORMATOS = {
     instruccionesFormato: `ESTILO TOP 5 DATOS PERTURBADORES / CURIOSOS (14 escenas rápidas):
 - Estructura obligatoria de etiquetas ("tag") para mantener a la audiencia hasta el final:
   * Escena 1: "tag": "GANCHO" (Presenta por qué nadie está preparado para el Dato #1).
-  * Escenas 2 y 3: "tag": "DATO #5" (Presentación e impacto del quinto dato).
-  * Escenas 4 y 5: "tag": "DATO #4" (Presentación e impacto del cuarto dato).
-  * Escenas 6 y 7: "tag": "DATO #3" (Presentación e impacto del tercer dato).
-  * Escenas 8 y 9: "tag": "DATO #2" (Presentación e impacto del segundo dato).
-  * Escenas 10, 11 y 12: "tag": "DATO #1" (El dato más impactante de todos explicado en 3 tomas).
-  * Escenas 13 y 14: "tag": "CIERRE" (Reflexión rápida y conector de Loop Infinito hacia la Escena 1).
-- Alterna "role": "narrador" con "role": "archivo" en el Dato #3 y Dato #1 para dar dinamismo auditivo.`,
+  * Escenas 2 y 3: "tag": "DATO #5"
+  * Escenas 4 y 5: "tag": "DATO #4"
+  * Escenas 6 y 7: "tag": "DATO #3"
+  * Escenas 8 y 9: "tag": "DATO #2"
+  * Escenas 10, 11 y 12: "tag": "DATO #1" (El dato más impactante explicado en 3 tomas).
+  * Escenas 13 y 14: "tag": "CIERRE" (Reflexión rápida y conector de Loop Infinito hacia la Escena 1).`,
   },
   ciencia: {
     numEscenas: 13,
@@ -106,7 +110,7 @@ const CONFIG_FORMATOS = {
     estiloVisualFlux: "photojournalism, Pulitzer prize photography style, high contrast, realistic modern investigative report",
     instruccionesFormato: `ESTILO REPORTAJE PERIODÍSTICO DE IMPACTO (12 escenas):
 - Narra el tema como una investigación de última hora o reportaje especial revelando qué se descubrió, dónde ocurrió, qué dicen las pruebas y por qué preocupa a los expertos.
-- Usa "role": "narrador" (que hablará con voz de locutor de noticiero profesional), "role": "archivo" en 2 escenas para citar el informe técnico y "role": "testigo" en 1 escena para citar declaraciones.`,
+- Usa "role": "narrador", "role": "archivo" en 2 escenas para citar el informe técnico y "role": "testigo" en 1 escena para citar declaraciones.`,
   },
 };
 
@@ -127,7 +131,7 @@ function extraerEscenas(respuesta) {
 }
 
 // ==========================================
-// 1. GENERADOR DE GUION CAMALEÓNICO POR FORMATO
+// 1. GENERADOR DE GUION CAMALEÓNICO CON ETIQUETAS DRAMA-3
 // ==========================================
 async function generarGuionAutomatico(tema, formatoActivo) {
   const cfg = CONFIG_FORMATOS[formatoActivo] || CONFIG_FORMATOS.documental;
@@ -147,7 +151,7 @@ Devuelve ÚNICAMENTE un arreglo JSON válido (sin texto adicional ni bloques mar
     "tag": "GANCHO",
     "role": "narrador",
     "tone": "intriga",
-    "text": "Narración en español neutro de ${cfg.palabrasPorEscena}. Escribe todos los números con letras (ej: mil novecientos ochenta).",
+    "text": "Narración en español neutro de ${cfg.palabrasPorEscena}. Usa puntos suspensivos (...) para pausas dramáticas, envuelve UNA palabra clave importante por escena en <stress>palabra</stress> y, solo en momentos de mucho misterio, una frase corta final en <whisper>frase susurrada</whisper>. Escribe todos los números con letras.",
     "imagePrompt": "Vertical 9:16 shot, main subject centered, ${cfg.estiloVisualFlux}, 8k, no text",
     "imageFile": "ia_escena_1.jpg"
   }
@@ -156,6 +160,7 @@ Reglas técnicas obligatorias:
 - Exactamente ${cfg.numEscenas} escenas numeradas del 1 al ${cfg.numEscenas} ("ia_escena_1.jpg" a "ia_escena_${cfg.numEscenas}.jpg").
 - "role" solo puede ser: "narrador", "testigo" o "archivo".
 - "tone" solo puede ser: "intriga", "serio", "impacto" o "reflexion".
+- En "text": Escribe todos los números con letras. Puedes usar <stress>palabra</stress> para dar énfasis vocal a una palabra clave y puntos suspensivos (...) donde quieras una pausa dramática.
 - En "imagePrompt": Escribe un prompt en inglés para FLUX.2-pro con UN sujeto u objeto centrado. REGLA DE SEGURIDAD AZURE: NUNCA uses palabras gráficas, violencia, cadáveres ni sangre (prohibido: blood, corpse, dead, cannibalism, bones, skull, gore, kill, weapon, torture). Usa metáforas visuales atmosféricas y seguras.
 - REGLA DE LOOP INFINITO VIRAL: El final de la Escena ${cfg.numEscenas} y el inicio de la Escena 1 deben formar UNA SOLA ORACIÓN CONTINUA cuando el video se repita en bucle (la última escena termina en frase abierta sin punto final y la primera escena la completa como gancho).`;
 
@@ -316,10 +321,88 @@ async function generarImagenIA(prompt, outputPath, numeroEscena, formatoActivo) 
 }
 
 // ==========================================
-// 3. LOCUCIÓN ADAPTATIVA POR FORMATO Y ROL (SSML HD)
+// 3A. MOTOR DE VOZ PRINCIPAL: FISH AUDIO DRAMA-3 (DIRECCIÓN ACTORAL)
+// ==========================================
+function construirTextoDrama3(texto, tono = "serio", rol = "narrador", formatoActivo = "documental") {
+  let direccionActoral = "[serious, deep captivating documentary narrator]";
+
+  if (rol === "testigo") {
+    direccionActoral = "[emotional, weary survivor reading a historical diary, intimate tone]";
+  } else if (rol === "archivo") {
+    direccionActoral = "[cold, clinical forensic investigator reading a classified file]";
+  } else if (formatoActivo === "noticia" && (tono === "serio" || tono === "impacto")) {
+    direccionActoral = "[authoritative investigative news anchor, crisp and urgent tone]";
+  } else if (tono === "intriga") {
+    direccionActoral = "[mysterious, low suspenseful tone]";
+  } else if (tono === "impacto") {
+    direccionActoral = "[intense, dramatic, shocked tone]";
+  } else if (tono === "reflexion") {
+    direccionActoral = "[somber, slow, deep reflective tone]";
+  }
+
+  // Convertimos los puntos suspensivos (...) en el comando nativo [pause] de Drama-3
+  const textoFormateado = String(texto)
+    .replace(/\.\.\./g, " [pause] ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return `${direccionActoral} ${textoFormateado}`;
+}
+
+async function generarVozFishDrama3(texto, tono, rol, formatoActivo, outputPath) {
+  if (!FISH_API_KEY || !FISH_VOICE_ID) {
+    return false;
+  }
+
+  const textoActoral = construirTextoDrama3(texto, tono, rol, formatoActivo);
+
+  for (let intento = 1; intento <= 3; intento++) {
+    try {
+      const res = await fetch("https://api.fish.audio/v1/tts", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${FISH_API_KEY}`,
+          "Content-Type": "application/json",
+          model: "drama-3",
+        },
+        body: JSON.stringify({
+          text: textoActoral,
+          reference_id: FISH_VOICE_ID,
+          format: "mp3",
+          mp3_bitrate: 192,
+          normalize: true,
+        }),
+      });
+
+      if (res.ok) {
+        const buffer = Buffer.from(await res.arrayBuffer());
+        if (buffer.length > 1000) {
+          fs.writeFileSync(outputPath, buffer);
+          console.log(`   🎭 Voz generada con Fish Audio Drama-3 (ID: ${FISH_VOICE_ID.slice(0, 8)}...)`);
+          return true;
+        }
+      } else {
+        const errTxt = await res.text();
+        console.warn(`   ⚠️ Aviso Fish Drama-3 (intento ${intento}/3): ${res.status} ${errTxt}`);
+        await esperar(1500 * intento);
+      }
+    } catch (err) {
+      console.warn(`   ⚠️ Error de conexión Fish Drama-3 (intento ${intento}/3): ${err.message}`);
+      await esperar(1500 * intento);
+    }
+  }
+
+  return false;
+}
+
+// ==========================================
+// 3B. MOTOR DE VOZ SECUNDARIO / RESPALDO: AZURE SPEECH MULTI-VOZ
 // ==========================================
 function escaparXml(texto) {
-  return texto
+  return String(texto)
+    // Limpiamos etiquetas exclusivas de Drama-3 si entra Azure como respaldo
+    .replace(/<\/?(stress|whisper)>/gi, "")
+    .replace(/\[.*?\]/g, "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -329,7 +412,6 @@ function escaparXml(texto) {
 
 async function generarVozAzure(texto, tono = "serio", rol = "narrador", formatoActivo = "documental", outputPath) {
   const url = `https://${AZURE_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`;
-
   const infoVoz = VOCES_DOCUMENTAL[rol] || VOCES_DOCUMENTAL.narrador;
 
   const configuracionTono = {
@@ -341,7 +423,6 @@ async function generarVozAzure(texto, tono = "serio", rol = "narrador", formatoA
 
   let cfg = { ...(configuracionTono[tono] || configuracionTono.serio) };
 
-  // Ajustes especiales según el Formato del video cuando habla el Narrador
   if (rol === "narrador") {
     if (formatoActivo === "noticia" && (tono === "serio" || tono === "impacto")) {
       cfg = { style: "newscast-formal", styledegree: "1.35", rate: "+6%", pitch: "-3%" };
@@ -394,6 +475,7 @@ async function generarVozAzure(texto, tono = "serio", rol = "narrador", formatoA
     throw new Error(`Error de Azure TTS (${response.status}): ${errText}`);
   }
   fs.writeFileSync(outputPath, Buffer.from(await response.arrayBuffer()));
+  console.log(`   🎙️ Voz generada con Azure Speech (${infoVoz.nombre})`);
 }
 
 // ==========================================
@@ -404,7 +486,8 @@ async function main() {
 
   console.log(`\n🚀 INICIANDO FÁBRICA AUTOMÁTICA DE REELS`);
   console.log(`📌 Tema: "${TEMA}"`);
-  console.log(`🎭 Formato activo: ${formatoActivo.toUpperCase()}\n`);
+  console.log(`🎭 Formato activo: ${formatoActivo.toUpperCase()}`);
+  console.log(`🎙️ Motor de voz seleccionado: ${MOTOR_VOZ.toUpperCase()}\n`);
 
   const listaEscenas = await generarGuionAutomatico(TEMA, formatoActivo);
   const processedScenes = [];
@@ -416,14 +499,21 @@ async function main() {
     const rolEscena = scene.role && VOCES_DOCUMENTAL[scene.role] ? scene.role : "narrador";
 
     console.log(
-      `[${i + 1}/${listaEscenas.length}] Escena: "${scene.tag}" | ${VOCES_DOCUMENTAL[rolEscena].etiqueta} | Tono: ${tonoEscena}`
+      `[${i + 1}/${listaEscenas.length}] Escena: "${scene.tag}" | Rol: ${rolEscena} | Tono: ${tonoEscena}`
     );
 
     const audioPath = `public/audio_scene_${i + 1}.mp3`;
     const imagePath = `public/${nombreImagen}`;
 
     await generarImagenIA(scene.imagePrompt, imagePath, i + 1, formatoActivo);
-    await generarVozAzure(scene.text, tonoEscena, rolEscena, formatoActivo, audioPath);
+
+    let vozGenerada = false;
+    if (MOTOR_VOZ === "fish_drama3") {
+      vozGenerada = await generarVozFishDrama3(scene.text, tonoEscena, rolEscena, formatoActivo, audioPath);
+    }
+    if (!vozGenerada) {
+      await generarVozAzure(scene.text, tonoEscena, rolEscena, formatoActivo, audioPath);
+    }
 
     const durationSec = getMP3Duration(fs.readFileSync(audioPath)) / 1000;
     const esUltimaEscena = i === listaEscenas.length - 1;
