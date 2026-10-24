@@ -79,8 +79,14 @@ Reglas obligatorias:
     const modelosGemini = [
       "gemini-3.8-flash",
       "gemini-3.7-flash",
+      "gemini-3.6-flash",
       "gemini-3.5-flash",
-      "gemini-flash-latest",
+      "gemini-3.5-flash-lite",
+      "gemini-3.1-flash-lite",
+      "gemini-flash-lite-latest",
+      "gemini-omni-1.1-flash",
+      "gemini-4-argon",
+      "gemma-4-31b-it",
     ];
 
     for (const modelo of modelosGemini) {
@@ -108,6 +114,7 @@ Reglas obligatorias:
           }
         } else {
           console.warn(`⚠️ Aviso de Gemini API (${modelo}): ${data.error?.message || JSON.stringify(data)}`);
+          await new Promise((r) => setTimeout(r, 2500));
         }
       } catch (e) {
         console.warn(`⚠️ Error al conectar con Gemini (${modelo}): ${e.message}`);
