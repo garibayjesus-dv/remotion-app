@@ -339,7 +339,7 @@ async function main() {
   fs.writeFileSync("./guion_sincronizado.json", JSON.stringify({ scenes: processedScenes }, null, 2));
 
   console.log("\n🎬 Renderizando con Remotion en modo Turbo Multi-Núcleo...");
-  execSync(`npx remotion render LongReel out/reel_azure_premium.mp4 --concurrency=3`, { stdio: "inherit" });
+  execSync(`npx remotion render LongReel out/reel_azure_premium.mp4 --concurrency=100%`, { stdio: "inherit" });
   console.log("\n🎉 ¡Reel completado con éxito!");
 }
 
