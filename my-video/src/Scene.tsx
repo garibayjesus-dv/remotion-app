@@ -16,6 +16,7 @@ import { vineBoom, whoosh, whip, pageTurn } from "@remotion/sfx";
 export interface SceneProps {
   index?: number;
   tag?: string;
+  format?: string;
   role?: string;
   tone?: string;
   image: string;
@@ -27,6 +28,8 @@ const CANTIDAD_PARTICULAS = 22;
 
 export const Scene: React.FC<SceneProps> = ({
   index = 0,
+  tag = "",
+  format = "documental",
   role = "narrador",
   tone = "serio",
   image,
@@ -67,10 +70,14 @@ export const Scene: React.FC<SceneProps> = ({
     baseRotate = interpolate(progreso, [0, 1], [1, -1]);
   }
 
-  // 2. PASO 4: Corte "Punch-In" Profesional a mitad de escena con resorte + reencuadre
+  // 2. Corte "Punch-In" Profesional a mitad de escena con resorte + reencuadre
   const framePunchIn = Math.floor(durationInFrames * 0.52);
   const aplicaPunchIn =
-    tone === "impacto" || tone === "intriga" || role !== "narrador" || index === 0;
+    tone === "impacto" ||
+    tone === "intriga" ||
+    role !== "narrador" ||
+    format === "top_datos" ||
+    index === 0;
 
   const punchSpring = aplicaPunchIn
     ? spring({
@@ -97,12 +104,13 @@ export const Scene: React.FC<SceneProps> = ({
       })
     : 1;
 
-  // Parpadeo sutil de proyector de 16mm cuando habla el testigo
   const flickerProyector =
     role === "testigo" ? 1 + noise2D(`flicker-${index}`, frame * 0.35, 0) * 0.05 : 1;
 
-  // 3. Cámara en mano orgánica con @remotion/noise
-  const intensidadShake = tone === "impacto" ? 10 : tone === "intriga" ? 6 : 3.5;
+  // 3. Cámara en mano orgánica con @remotion/noise (más intensa en terror/impacto)
+  const baseIntensidad = format === "terror" ? 8 : 4;
+  const intensidadShake =
+    tone === "impacto" ? 10 : tone === "intriga" ? 6.5 : baseIntensidad;
   const velocidadShake = tone === "impacto" ? 0.045 : 0.025;
 
   const shakeX = noise2D(`shakeX-${index}`, frame * velocidadShake, 0) * intensidadShake;
@@ -125,26 +133,37 @@ export const Scene: React.FC<SceneProps> = ({
     extrapolateRight: "clamp",
   });
 
-  // 5. Light Leak (filtración de luz de cine en el cambio de escena)
+  // 5. Light Leak adaptativo según el Formato y Rol
   const opacidadLightLeak = interpolate(frame, [0, 4, 18], [0.75, 0.55, 0], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
 
-  const colorLightLeak =
-    role === "testigo"
-      ? "radial-gradient(circle at 25% 35%, rgba(245, 158, 11, 0.85) 0%, rgba(180, 83, 9, 0.4) 45%, rgba(0,0,0,0) 75%)"
-      : index % 2 === 0
-        ? "radial-gradient(circle at 20% 40%, rgba(251, 146, 60, 0.85) 0%, rgba(239, 68, 68, 0.35) 45%, rgba(0,0,0,0) 75%)"
-        : "radial-gradient(circle at 80% 30%, rgba(56, 189, 248, 0.8) 0%, rgba(99, 102, 241, 0.35) 45%, rgba(0,0,0,0) 75%)";
+  let colorLightLeak =
+    index % 2 === 0
+      ? "radial-gradient(circle at 20% 40%, rgba(251, 146, 60, 0.85) 0%, rgba(239, 68, 68, 0.35) 45%, rgba(0,0,0,0) 75%)"
+      : "radial-gradient(circle at 80% 30%, rgba(56, 189, 248, 0.8) 0%, rgba(99, 102, 241, 0.35) 45%, rgba(0,0,0,0) 75%)";
 
-  // 6. Estética de color según la voz que habla
+  if (role === "testigo") {
+    colorLightLeak =
+      "radial-gradient(circle at 25% 35%, rgba(245, 158, 11, 0.85) 0%, rgba(180, 83, 9, 0.4) 45%, rgba(0,0,0,0) 75%)";
+  } else if (format === "terror") {
+    colorLightLeak =
+      "radial-gradient(circle at 30% 35%, rgba(220, 38, 38, 0.75) 0%, rgba(15, 23, 42, 0.5) 50%, rgba(0,0,0,0) 75%)";
+  } else if (format === "ciencia") {
+    colorLightLeak =
+      "radial-gradient(circle at 75% 30%, rgba(34, 211, 238, 0.85) 0%, rgba(59, 130, 246, 0.4) 48%, rgba(0,0,0,0) 75%)";
+  }
+
+  // 6. Estética de color según Rol y Formato
   const filtroPorRol =
     role === "testigo"
       ? "sepia(0.24) contrast(1.14) saturate(0.95)"
       : role === "archivo"
         ? "contrast(1.16) saturate(0.88) hue-rotate(-6deg)"
-        : "contrast(1.09) saturate(1.14)";
+        : format === "terror"
+          ? "contrast(1.15) saturate(0.92)"
+          : "contrast(1.09) saturate(1.14)";
 
   // 7. Partículas 3D Parallax deterministas
   const particulas = useMemo(() => {
@@ -176,27 +195,40 @@ export const Scene: React.FC<SceneProps> = ({
     index === 0 ? vineBoom : role === "testigo" ? pageTurn : index % 3 === 0 ? whip : whoosh;
   const volumenSfx = index === 0 ? 0.22 : 0.13;
 
-  // 8. PASO 5: Sello minimalista tipo Netflix arriba (solo primeros 2.5s en Testigo / Archivo)
-  const textoSello =
-    role === "testigo"
-      ? "REGISTRO TESTIMONIAL // BITÁCORA"
-      : role === "archivo"
-        ? "EVIDENCIA FORENSE // EXPEDIENTE"
-        : null;
+  // 8. Sello superior inteligente según el formato y el rol
+  let textoSello: string | null = null;
+  const esDatoTop = format === "top_datos" && /^DATO\s*#?\d/i.test(tag);
+
+  if (esDatoTop) {
+    textoSello = `${tag.toUpperCase()} // ARCHIVO CLASIFICADO`;
+  } else if (role === "testigo") {
+    textoSello = "REGISTRO TESTIMONIAL // BITÁCORA";
+  } else if (role === "archivo") {
+    textoSello = "EVIDENCIA FORENSE // EXPEDIENTE";
+  } else if (format === "noticia" && index === 0) {
+    textoSello = "REPORTE ESPECIAL // INVESTIGACIÓN";
+  }
+
+  const duracionSello = esDatoTop ? Math.min(durationInFrames - 5, 110) : 78;
 
   const caracteresVisibles = textoSello
     ? Math.floor(
-        interpolate(frame, [4, 34], [0, textoSello.length], {
+        interpolate(frame, [4, 30], [0, textoSello.length], {
           extrapolateLeft: "clamp",
           extrapolateRight: "clamp",
         })
       )
     : 0;
 
-  const opacidadSello = interpolate(frame, [0, 8, 65, 78], [0, 0.9, 0.9, 0], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
+  const opacidadSello = interpolate(
+    frame,
+    [0, 8, Math.max(10, duracionSello - 12), duracionSello],
+    [0, 0.92, 0.92, 0],
+    {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+    }
+  );
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#000000", overflow: "hidden" }}>
@@ -248,7 +280,12 @@ export const Scene: React.FC<SceneProps> = ({
                 width: `${p.size}px`,
                 height: `${p.size}px`,
                 borderRadius: "50%",
-                backgroundColor: role === "testigo" ? "#fde68a" : "#e0f2fe",
+                backgroundColor:
+                  role === "testigo"
+                    ? "#fde68a"
+                    : format === "terror"
+                      ? "#fca5a5"
+                      : "#e0f2fe",
                 opacity: parpadeo,
                 filter: `blur(${p.blur}px)`,
                 boxShadow: "0 0 8px rgba(255,255,255,0.6)",
@@ -291,7 +328,9 @@ export const Scene: React.FC<SceneProps> = ({
           background:
             role === "testigo"
               ? "radial-gradient(circle at 50% 25%, rgba(245, 158, 11, 0.22) 0%, rgba(0, 0, 0, 0) 65%)"
-              : "radial-gradient(circle at 50% 25%, rgba(56, 189, 248, 0.22) 0%, rgba(0, 0, 0, 0) 65%)",
+              : format === "terror"
+                ? "radial-gradient(circle at 50% 25%, rgba(220, 38, 38, 0.18) 0%, rgba(0, 0, 0, 0) 65%)"
+                : "radial-gradient(circle at 50% 25%, rgba(56, 189, 248, 0.22) 0%, rgba(0, 0, 0, 0) 65%)",
           opacity: pulsoAtmosfera,
           mixBlendMode: "screen",
         }}
@@ -313,8 +352,8 @@ export const Scene: React.FC<SceneProps> = ({
         }}
       />
 
-      {/* 11. PASO 5: Sello minimalista tipo Netflix (solo aparece 2.5s arriba en Testigo / Archivo) */}
-      {textoSello && frame < 78 && (
+      {/* 11. Sello minimalista superior (Top Datos #5->#1, Testigo, Forense o Reporte) */}
+      {textoSello && frame < duracionSello && (
         <div
           style={{
             position: "absolute",
@@ -328,7 +367,12 @@ export const Scene: React.FC<SceneProps> = ({
             fontSize: "24px",
             fontWeight: 700,
             letterSpacing: "3px",
-            color: role === "testigo" ? "#fde68a" : "#7dd3fc",
+            color:
+              role === "testigo"
+                ? "#fde68a"
+                : esDatoTop
+                  ? "#38bdf8"
+                  : "#7dd3fc",
             textShadow: "0 2px 12px rgba(0,0,0,0.9)",
           }}
         >
@@ -337,7 +381,12 @@ export const Scene: React.FC<SceneProps> = ({
               width: "12px",
               height: "12px",
               borderRadius: "50%",
-              backgroundColor: role === "testigo" ? "#f59e0b" : "#ef4444",
+              backgroundColor:
+                role === "testigo"
+                  ? "#f59e0b"
+                  : esDatoTop
+                    ? "#38bdf8"
+                    : "#ef4444",
               boxShadow: "0 0 12px currentColor",
             }}
           />

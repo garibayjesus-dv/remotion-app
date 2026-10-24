@@ -4,9 +4,21 @@ on:
   workflow_dispatch:
     inputs:
       tema:
-        description: '🎬 Tema del Reel (ej: El incidente del Paso Diátlov)'
+        description: '🎬 Tema del Reel (ej: 5 cosas que encontraron en la Fosa de las Marianas)'
         required: true
         default: 'El misterio del barco fantasma Mary Celeste'
+      formato:
+        description: '🎭 Formato y Estilo del Guion'
+        required: true
+        type: choice
+        default: 'auto'
+        options:
+          - 'auto'
+          - 'documental'
+          - 'top_datos'
+          - 'ciencia'
+          - 'terror'
+          - 'noticia'
 
 permissions:
   contents: read
@@ -36,6 +48,7 @@ jobs:
         working-directory: ./my-video
         env:
           TEMA_VIDEO: ${{ github.event.inputs.tema }}
+          FORMATO_VIDEO: ${{ github.event.inputs.formato }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           AZURE_FOUNDRY_KEY: ${{ secrets.AZURE_FOUNDRY_KEY }}
           AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
@@ -46,19 +59,7 @@ jobs:
           CLOUDFLARE_API_TOKEN_2: ${{ secrets.CLOUDFLARE_API_TOKEN_2 }}
         run: node crear-video-ia.mjs
 
-      - name: 📲 Enviar Reel terminado a Telegram
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          TEMA_VIDEO: ${{ github.event.inputs.tema }}
-        run: |
-          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendVideo" \
-            -F chat_id="${TELEGRAM_CHAT_ID}" \
-            -F video=@"my-video/out/reel_azure_premium.mp4" \
-            -F supports_streaming="true" \
-            -F caption="🎬 ¡Reel listo para publicar!%0A📌 Tema: ${TEMA_VIDEO}"
-
-      - name: Subir video renderizado como respaldo en GitHub
+      - name: Subir video renderizado
         uses: actions/upload-artifact@v4
         with:
           name: reel-generado
