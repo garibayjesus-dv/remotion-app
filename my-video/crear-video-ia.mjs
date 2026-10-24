@@ -85,8 +85,9 @@ Reglas obligatorias de Dirección Documental Multi-Voz:
   3. "archivo": Voz clínica/investigadora que revela el dato forense, científico o informe oficial más perturbador (úsalo en 1 escena clave, por ejemplo escena 7 u 8).
 - El campo "tone" debe ser uno de estos 4 valores según la emoción: "intriga", "serio", "impacto", "reflexion".
 - En "imagePrompt": Escribe un prompt en inglés para FLUX.2-pro con UN sujeto u objeto centrado. REGLA DE SEGURIDAD AZURE: NUNCA uses palabras gráficas, violencia, cadáveres ni sangre (prohibido: blood, corpse, dead, cannibalism, bones, skull, gore, kill, weapon, torture). Si la escena trata algo trágico, describe una metáfora visual atmosférica y segura.
-- Escena 1 ("role": "narrador", "tone": "intriga") debe ser un gancho impactante.
-- Escena 12 ("role": "narrador", "tone": "reflexion") debe cerrar con una reflexión profunda.`;
+- REGLA DE LOOP INFINITO VIRAL (MUY IMPORTANTE): Diseña el final de la Escena 12 y el inicio de la Escena 1 para que formen UNA SOLA ORACIÓN CONTINUA cuando el video se repita en bucle.
+  * La Escena 12 ("role": "narrador", "tone": "reflexion") debe terminar en una frase abierta sin punto final (ej: "...y esa es la razón por la que aún hoy nadie puede explicar").
+  * La Escena 1 ("role": "narrador", "tone": "intriga") debe empezar completando esa frase como un gancho potente (ej: "cómo desaparecieron sin dejar rastro en medio del océano...").`;
 
   if (GEMINI_API_KEY) {
     const modelosGemini = [
@@ -341,7 +342,8 @@ async function main() {
     await generarVozAzure(scene.text, tonoEscena, rolEscena, audioPath);
 
     const durationSec = getMP3Duration(fs.readFileSync(audioPath)) / 1000;
-    const totalFrames = Math.ceil(durationSec * 30) + 8;
+    const esUltimaEscena = i === listaEscenas.length - 1;
+    const totalFrames = Math.ceil(durationSec * 30) + (esUltimaEscena ? 2 : 8);
 
     processedScenes.push({
       id: String(i + 1),

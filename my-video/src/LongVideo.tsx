@@ -24,7 +24,7 @@ export const LongVideo: React.FC<LongVideoProps> = ({ scenes = [] }) => {
       {/* Música de fondo ambiental tenue */}
       <Audio src={staticFile("musica.mp3")} volume={0.07} />
 
-      {/* Secuencia de escenas con transiciones cruzadas, SFX y cámara orgánica */}
+      {/* Secuencia de escenas con transiciones cruzadas, SFX, Parallax 3D y Multi-Voz */}
       <Series>
         {scenes.map((scene, index) => (
           <Series.Sequence
@@ -34,6 +34,7 @@ export const LongVideo: React.FC<LongVideoProps> = ({ scenes = [] }) => {
             <Scene
               index={index}
               tag={scene.tag}
+              role={scene.role}
               tone={scene.tone}
               image={scene.image}
               prevImage={index > 0 ? scenes[index - 1].image : undefined}
