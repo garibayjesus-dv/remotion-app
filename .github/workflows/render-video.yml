@@ -8,6 +8,10 @@ on:
         required: true
         default: 'El misterio del barco fantasma Mary Celeste'
 
+permissions:
+  contents: read
+  models: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -33,6 +37,7 @@ jobs:
         env:
           TEMA_VIDEO: ${{ github.event.inputs.tema }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID_2: ${{ secrets.CLOUDFLARE_ACCOUNT_ID_2 }}

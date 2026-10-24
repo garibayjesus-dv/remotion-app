@@ -11,6 +11,9 @@
   "dependencies": {
     "@huggingface/inference": "^4.13.32",
     "@remotion/cli": "4.0.538",
+    "@remotion/noise": "4.0.538",
+    "@remotion/sfx": "4.0.538",
+    "@remotion/transitions": "4.0.538",
     "@remotion/zod-types": "4.0.538",
     "dotenv": "^18.0.9",
     "get-mp3-duration": "^1.0.0",
