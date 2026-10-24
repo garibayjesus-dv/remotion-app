@@ -46,7 +46,19 @@ jobs:
           CLOUDFLARE_API_TOKEN_2: ${{ secrets.CLOUDFLARE_API_TOKEN_2 }}
         run: node crear-video-ia.mjs
 
-      - name: Subir video renderizado
+      - name: 📲 Enviar Reel terminado a Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TEMA_VIDEO: ${{ github.event.inputs.tema }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendVideo" \
+            -F chat_id="${TELEGRAM_CHAT_ID}" \
+            -F video=@"my-video/out/reel_azure_premium.mp4" \
+            -F supports_streaming="true" \
+            -F caption="🎬 ¡Reel listo para publicar!%0A📌 Tema: ${TEMA_VIDEO}"
+
+      - name: Subir video renderizado como respaldo en GitHub
         uses: actions/upload-artifact@v4
         with:
           name: reel-generado
