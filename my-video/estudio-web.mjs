@@ -145,6 +145,9 @@ function extraerEscenas(respuesta) {
   return null;
 }
 
+// ==========================================
+// 1. GENERADOR DE GUION CON LOS 10 MODELOS GEMINI + RESPALDO CLOUDFLARE
+// ==========================================
 async function generarGuionIA(tema, formatoActivo, guionPropio = "") {
   const cfg = CONFIG_FORMATOS[formatoActivo] || CONFIG_FORMATOS.documental;
   const instruccionOrigen = guionPropio
@@ -171,39 +174,82 @@ Reglas:
 - "tone": "intriga", "serio", "impacto" o "reflexion".
 - En "imagePrompt": Prompt en inglés con sujeto centrado (${cfg.estiloVisualFlux}). Prohibido usar palabras sangrientas o violentas.`;
 
-  const modelosGemini = [
-    "gemini-3.8-flash",
-    "gemini-3.7-flash",
-    "gemini-3.6-flash",
-    "gemini-3.5-flash",
-    "gemini-3.5-flash-lite",
-    "gemini-flash-lite-latest",
-  ];
+  if (GEMINI_API_KEY) {
+    const modelosGemini = [
+      "gemma-4-31b-it",
+      "gemini-3.8-flash",
+      "gemini-3.7-flash",
+      "gemini-3.6-flash",
+      "gemini-3.5-flash",
+      "gemini-3.5-flash-lite",
+      "gemini-3.1-flash-lite",
+      "gemini-flash-lite-latest",
+      "gemini-omni-1.1-flash",
+      "gemini-4-argon",
+    ];
 
-  for (const modelo of modelosGemini) {
+    for (const modelo of modelosGemini) {
+      try {
+        agregarLog(`🧠 Solicitando guion a Google (${modelo})...`);
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${GEMINI_API_KEY}`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: promptSistema }] }],
+            generationConfig: { temperature: 0.7 },
+          }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          const escenas = extraerEscenas(data?.candidates?.[0]?.content?.parts?.[0]?.text);
+          if (escenas && escenas.length > 0) {
+            agregarLog(`✅ Guion [${formatoActivo.toUpperCase()}] creado con ${modelo} (${escenas.length} escenas)`);
+            return escenas;
+          }
+        } else {
+          agregarLog(`⚠️ ${modelo} ocupado, pasando al siguiente...`);
+        }
+      } catch (e) {
+        await esperar(1000);
+      }
+    }
+  }
+
+  for (let i = 0; i < CUENTAS_CF.length; i++) {
+    const cuenta = CUENTAS_CF[i];
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${GEMINI_API_KEY}`;
-      const res = await fetch(url, {
+      agregarLog(`🧠 Generando guion con respaldo Cloudflare (${cuenta.nombre})...`);
+      const cfUrl = `https://api.cloudflare.com/client/v4/accounts/${cuenta.id}/ai/run/@cf/meta/llama-3.1-8b-instruct`;
+      const response = await fetch(cfUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${cuenta.token}`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: promptSistema }] }],
-          generationConfig: { temperature: 0.7 },
+          messages: [
+            { role: "system", content: "Responde únicamente con un JSON array válido sin markdown." },
+            { role: "user", content: promptSistema },
+          ],
+          max_tokens: 3800,
         }),
       });
-      const data = await res.json();
-      if (res.ok) {
-        const escenas = extraerEscenas(data?.candidates?.[0]?.content?.parts?.[0]?.text);
+
+      const data = await response.json();
+      if (data.success && data.result?.response) {
+        const escenas = extraerEscenas(data.result.response);
         if (escenas && escenas.length > 0) {
-          agregarLog(`✅ Guion [${formatoActivo.toUpperCase()}] creado con Gemini (${modelo} - ${escenas.length} escenas)`);
+          agregarLog(`✅ Guion creado con respaldo Cloudflare ${cuenta.nombre} (${escenas.length} escenas)`);
           return escenas;
         }
       }
-    } catch (e) {
-      await esperar(1200);
+    } catch (err) {
+      agregarLog(`⚠️ Aviso en ${cuenta.nombre}: ${err.message}`);
     }
   }
-  throw new Error("No se pudo generar el guion con Gemini.");
+
+  throw new Error("No se pudo generar el guion en Gemini ni en Cloudflare.");
 }
 
 let indiceCF = 0;
@@ -822,6 +868,7 @@ async function enviarTelegramManual() {
   });
 }
 
+let ultimoPaso = '';
 setInterval(async () => {
   try {
     const r = await fetch('/api/estado');
@@ -832,6 +879,10 @@ setInterval(async () => {
     const caja = document.getElementById('cajaLogs');
     caja.textContent = d.logs.join('\\n');
     caja.scrollTop = caja.scrollHeight;
+    if (d.estado.paso !== ultimoPaso && (d.estado.paso.includes('Escena') || d.estado.paso.includes('completado'))) {
+      ultimoPaso = d.estado.paso;
+      cargarEscenasActuales();
+    }
   } catch {}
 }, 1500);
 
