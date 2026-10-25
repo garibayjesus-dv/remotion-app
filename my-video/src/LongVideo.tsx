@@ -24,7 +24,7 @@ export const LongVideo: React.FC<LongVideoProps> = ({ scenes = [] }) => {
       {/* Música de fondo ambiental tenue */}
       <Audio src={staticFile("musica.mp3")} volume={0.07} />
 
-      {/* Secuencia de escenas camaleónica */}
+      {/* Secuencia de escenas camaleónica 2.0 */}
       <Series>
         {scenes.map((scene, index) => (
           <Series.Sequence
@@ -33,6 +33,7 @@ export const LongVideo: React.FC<LongVideoProps> = ({ scenes = [] }) => {
           >
             <Scene
               index={index}
+              totalScenes={scenes.length}
               tag={scene.tag}
               format={scene.format}
               role={scene.role}

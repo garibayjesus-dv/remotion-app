@@ -8,7 +8,7 @@ on:
         required: true
         default: 'El misterio del barco fantasma Mary Celeste'
       formato:
-        description: '🎭 Formato y Estilo del Guion'
+        description: '🎭 Formato y Estilo Visual'
         required: true
         type: choice
         default: 'auto'
@@ -19,6 +19,8 @@ on:
           - 'ciencia'
           - 'terror'
           - 'noticia'
+          - 'espiritual'
+          - 'infantil'
       motor_voz:
         description: '🎙️ Motor de Voz Principal'
         required: true
@@ -28,13 +30,20 @@ on:
           - 'fish_drama3'
           - 'azure_multivoz'
       id_voz_fish:
-        description: '🔑 ID o URL de voz de Fish Audio opcional (déjalo vacío para usar tu voz por defecto)'
+        description: '🔑 ID o URL de voz de Fish Audio opcional (vacío = usar tu voz por defecto)'
+        required: false
+        default: ''
+      guion_propio:
+        description: '📜 Guion propio opcional (pega aquí tu guion de los Prompts Expertos o déjalo vacío)'
         required: false
         default: ''
 
 permissions:
   contents: read
   models: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
@@ -44,10 +53,10 @@ jobs:
       - name: Descargar repositorio
         uses: actions/checkout@v4
 
-      - name: Configurar Node.js con caché
+      - name: Configurar Node.js 24 con caché
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: 'npm'
           cache-dependency-path: my-video/package-lock.json
 
@@ -63,6 +72,7 @@ jobs:
           FORMATO_VIDEO: ${{ github.event.inputs.formato }}
           MOTOR_VOZ: ${{ github.event.inputs.motor_voz }}
           FISH_VOICE_OVERRIDE: ${{ github.event.inputs.id_voz_fish }}
+          GUION_PROPIO: ${{ github.event.inputs.guion_propio }}
           FISH_API_KEY: ${{ secrets.FISH_API_KEY }}
           FISH_VOICE_ID: ${{ secrets.FISH_VOICE_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -77,9 +87,11 @@ jobs:
           CLOUDFLARE_API_TOKEN_2: ${{ secrets.CLOUDFLARE_API_TOKEN_2 }}
         run: node crear-video-ia.mjs
 
-      - name: Subir video renderizado como respaldo en GitHub
+      - name: Subir video y portada renderizados como respaldo en GitHub
         uses: actions/upload-artifact@v4
         with:
           name: reel-generado
-          path: my-video/out/reel_azure_premium.mp4
+          path: |
+            my-video/out/reel_azure_premium.mp4
+            my-video/out/portada_reel.jpg
           retention-days: 7

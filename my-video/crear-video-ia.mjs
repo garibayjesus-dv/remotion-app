@@ -6,6 +6,7 @@ import "dotenv/config";
 const TEMA = process.env.TEMA_VIDEO || "El misterio del Pozo Superprofundo de Kola";
 const FORMATO_INPUT = (process.env.FORMATO_VIDEO || "auto").toLowerCase().trim();
 const MOTOR_VOZ = (process.env.MOTOR_VOZ || "fish_drama3").toLowerCase().trim();
+const GUION_PROPIO = (process.env.GUION_PROPIO || "").trim();
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const AZURE_FOUNDRY_KEY = process.env.AZURE_FOUNDRY_KEY;
@@ -52,6 +53,12 @@ const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function resolverFormato(tema, formatoElegido) {
   if (formatoElegido && formatoElegido !== "auto") return formatoElegido;
   const t = tema.toLowerCase();
+  if (/(oraci[oó]n|plegaria|dios|jes[uú]s|biblia|b[ií]blic|milagro|salmo|fe |bendici[oó]n|ángel|virgen|santo)/.test(t)) {
+    return "espiritual";
+  }
+  if (/(niñ|infantil|cuento para|caricatura|aprendiendo|valores para|fabula|fábula|pequeñitos)/.test(t)) {
+    return "infantil";
+  }
   if (/(\b5\b|\bcinco\b|datos|cosas que|curiosidades|no sab[ií]as|nadie quiere saber|top )/.test(t)) {
     return "top_datos";
   }
@@ -61,7 +68,7 @@ function resolverFormato(tema, formatoElegido) {
   if (/(ciencia|f[ií]sica|universo|espacio|agujero negro|cerebro|c[oó]mo funciona|paradoja|cu[aá]ntic|planeta)/.test(t)) {
     return "ciencia";
   }
-  if (/(noticia|descubren|hallazgo|alerta|acaban de|cient[ií]ficos encuentran|revelan|nuevo)/.test(t)) {
+  if (/(noticia|descubren|hallazgo|alerta|acaban de|cient[ií]ficos encuentran|revelan|nuevo|última hora)/.test(t)) {
     return "noticia";
   }
   return "documental";
@@ -114,6 +121,23 @@ const CONFIG_FORMATOS = {
 - Narra el tema como una investigación de última hora o reportaje especial revelando qué se descubrió, dónde ocurrió, qué dicen las pruebas y por qué preocupa a los expertos.
 - Usa "role": "narrador", "role": "archivo" en 2 escenas para citar el informe técnico y "role": "testigo" en 1 escena para citar declaraciones.`,
   },
+  espiritual: {
+    numEscenas: 12,
+    palabrasPorEscena: "18 a 24 palabras (tono cálido, reverente, emotivo e inspirador)",
+    estiloVisualFlux: "divine golden hour volumetric lighting, peaceful spiritual cinematic realism, warm celestial rays, sacred serene atmosphere",
+    instruccionesFormato: `ESTILO ESPIRITUAL, ORACIÓN PODEROSA, HISTORIA BÍBLICA O RELATO DE MILAGRO (12 escenas):
+- Inicia en la Escena 1 con un gancho espiritual profundo que detenga al espectador ("No deslices, esta palabra llegó a tu vida hoy por un propósito...").
+- Desarrolla la oración, relato bíblico o testimonio milagroso con fe, consuelo y esperanza profunda.
+- Cierra invitando a declarar "Amén" o "Lo recibo" en paz. Usa "role": "narrador" con "tone": "reflexion" o "serio".`,
+  },
+  infantil: {
+    numEscenas: 12,
+    palabrasPorEscena: "16 a 22 palabras (lenguaje tierno, alegre, mágico y educativo para niños menores de 10 años)",
+    estiloVisualFlux: "3D Pixar and Disney cute animation style, vibrant cheerful colors, adorable expressive characters, magical warm lighting, family friendly",
+    instruccionesFormato: `ESTILO CUENTO INFANTIL, VALORES Y APRENDIZAJE ANIMADO PARA NIÑOS (12 escenas):
+- Cuenta una historia mágica, tierna y divertida con enseñanza de valores, animales o números para niños pequeños.
+- Incluye momentos interactivos donde el narrador anime al niño a participar y cierra con una moraleja hermosa para toda la familia.`,
+  },
 };
 
 function extraerEscenas(respuesta) {
@@ -133,18 +157,23 @@ function extraerEscenas(respuesta) {
 }
 
 // ==========================================
-// 1. GENERADOR DE GUION CAMALEÓNICO CON ETIQUETAS DRAMA-3
+// 1. GENERADOR DE GUION (AUTOMÁTICO O DESDE GUION PROPIO EXPERTO)
 // ==========================================
-async function generarGuionAutomatico(tema, formatoActivo) {
+async function generarGuionAutomatico(tema, formatoActivo, guionPropio = "") {
   const cfg = CONFIG_FORMATOS[formatoActivo] || CONFIG_FORMATOS.documental;
+
+  const instruccionOrigen = guionPropio
+    ? `EL USUARIO PROPORCIONÓ ESTE GUION PROPIO:\n"""\n${guionPropio}\n"""\nTu tarea es dividir este guion propio en entre 10 y ${cfg.numEscenas} escenas secuenciales RESPETANDO FIELMENTE su texto, sus palabras y cualquier etiqueta de voz como [pause], <stress>, <whisper> o instrucciones entre corchetes [...], y crear para cada fragmento su "imagePrompt" en inglés.`
+    : `Escribe un guion original de exactamente ${cfg.numEscenas} escenas sobre el tema: "${tema}".\n\n${cfg.instruccionesFormato}`;
+
   console.log(
-    `🧠 Generando guion formato [${formatoActivo.toUpperCase()}] (${cfg.numEscenas} escenas) sobre: "${tema}"...`
+    guionPropio
+      ? `📜 Procesando tu GUION PROPIO en formato [${formatoActivo.toUpperCase()}]...`
+      : `🧠 Generando guion formato [${formatoActivo.toUpperCase()}] (${cfg.numEscenas} escenas) sobre: "${tema}"...`
   );
 
   const promptSistema = `Actúa como director y guionista experto en Reels virales de altísima retención.
-Escribe un guion de exactamente ${cfg.numEscenas} escenas sobre el tema: "${tema}".
-
-${cfg.instruccionesFormato}
+${instruccionOrigen}
 
 Devuelve ÚNICAMENTE un arreglo JSON válido (sin texto adicional ni bloques markdown) con esta estructura exacta:
 [
@@ -153,18 +182,17 @@ Devuelve ÚNICAMENTE un arreglo JSON válido (sin texto adicional ni bloques mar
     "tag": "GANCHO",
     "role": "narrador",
     "tone": "intriga",
-    "text": "Narración en español neutro de ${cfg.palabrasPorEscena}. Usa puntos suspensivos (...) para pausas dramáticas, envuelve UNA palabra clave importante por escena en <stress>palabra</stress> y, solo en momentos de mucho misterio, una frase corta final en <whisper>frase susurrada</whisper>. Escribe todos los números con letras.",
+    "text": "Narración en español neutro de ${cfg.palabrasPorEscena}. Usa puntos suspensivos (...) para pausas dramáticas, envuelve UNA palabra clave importante por escena en <stress>palabra</stress> y, cuando aplique, una frase corta en <whisper>frase susurrada</whisper>. Escribe todos los números con letras.",
     "imagePrompt": "Vertical 9:16 shot, main subject centered, ${cfg.estiloVisualFlux}, 8k, no text",
     "imageFile": "ia_escena_1.jpg"
   }
 ]
 Reglas técnicas obligatorias:
-- Exactamente ${cfg.numEscenas} escenas numeradas del 1 al ${cfg.numEscenas} ("ia_escena_1.jpg" a "ia_escena_${cfg.numEscenas}.jpg").
+- Numera las escenas correlativamente ("ia_escena_1.jpg", "ia_escena_2.jpg", etc.).
 - "role" solo puede ser: "narrador", "testigo" o "archivo".
 - "tone" solo puede ser: "intriga", "serio", "impacto" o "reflexion".
-- En "text": Escribe todos los números con letras. Puedes usar <stress>palabra</stress> para dar énfasis vocal a una palabra clave y puntos suspensivos (...) donde quieras una pausa dramática.
-- En "imagePrompt": Escribe un prompt en inglés con UN sujeto u objeto centrado. REGLA DE SEGURIDAD: NUNCA uses palabras gráficas, violencia, cadáveres ni sangre (prohibido: blood, corpse, dead, cannibalism, bones, skull, gore, kill, weapon, torture). Usa metáforas visuales atmosféricas y seguras.
-- REGLA DE LOOP INFINITO VIRAL: El final de la Escena ${cfg.numEscenas} y el inicio de la Escena 1 deben formar UNA SOLA ORACIÓN CONTINUA cuando el video se repita en bucle (la última escena termina en frase abierta sin punto final y la primera escena la completa como gancho).`;
+- En "text": Escribe todos los números con letras.
+- En "imagePrompt": Escribe un prompt en inglés con UN sujeto u objeto centrado en estilo (${cfg.estiloVisualFlux}). REGLA DE SEGURIDAD: NUNCA uses palabras gráficas, violencia, cadáveres ni sangre (prohibido: blood, corpse, dead, cannibalism, bones, skull, gore, kill, weapon, torture).`;
 
   if (GEMINI_API_KEY) {
     const modelosGemini = [
@@ -197,7 +225,7 @@ Reglas técnicas obligatorias:
           const textoJson = data?.candidates?.[0]?.content?.parts?.[0]?.text;
           const escenas = extraerEscenas(textoJson);
           if (escenas && escenas.length > 0) {
-            console.log(`✅ Guion [${formatoActivo}] generado con Google Gemini (${modelo} - ${escenas.length} escenas).`);
+            console.log(`✅ Guion [${formatoActivo}] listo con Google Gemini (${modelo} - ${escenas.length} escenas).`);
             return escenas;
           }
         } else {
@@ -251,9 +279,9 @@ Reglas técnicas obligatorias:
 //    1º CLOUDFLARE GRATIS (Cuenta 1 -> Cuenta 2)
 //    2º RESPALDO AUTOMÁTICO: AZURE FLUX.2-PRO (768x1344)
 // ==========================================
-async function generarImagenIA(prompt, outputPath, numeroEscena, formatoActivo) {
+export async function generarImagenIA(prompt, outputPath, numeroEscena, formatoActivo = "documental") {
   const cfg = CONFIG_FORMATOS[formatoActivo] || CONFIG_FORMATOS.documental;
-  const promptFinal = `${prompt}, ${cfg.estiloVisualFlux}, masterpiece, photorealistic, vertical 9:16 composition, sharp focus, 8k, no text, no watermark, natural anatomy`;
+  const promptFinal = `${prompt}, ${cfg.estiloVisualFlux}, masterpiece, vertical 9:16 composition, sharp focus, 8k, no text, no watermark, natural anatomy`;
 
   // PASO 1: Intentar primero con tus cuentas gratuitas de Cloudflare (Cuenta 1 -> Cuenta 2)
   while (indiceCuentaActual < CUENTAS_CF.length) {
@@ -293,7 +321,7 @@ async function generarImagenIA(prompt, outputPath, numeroEscena, formatoActivo) 
       const promptSeguro =
         intento === 1
           ? promptFinal
-          : `Atmospheric cinematic vertical 9:16 shot inspired by ${TEMA}, ${cfg.estiloVisualFlux}, mysterious scene, moody volumetric lighting, 8k, photorealistic, no text`;
+          : `Atmospheric cinematic vertical 9:16 shot inspired by ${TEMA}, ${cfg.estiloVisualFlux}, moody volumetric lighting, 8k, no text`;
       try {
         const resAz = await fetch(AZURE_FLUX_URL, {
           method: "POST",
@@ -334,9 +362,23 @@ async function generarImagenIA(prompt, outputPath, numeroEscena, formatoActivo) 
 // 3A. MOTOR DE VOZ PRINCIPAL: FISH AUDIO DRAMA-3 (DIRECCIÓN ACTORAL)
 // ==========================================
 function construirTextoDrama3(texto, tono = "serio", rol = "narrador", formatoActivo = "documental") {
+  const limpio = String(texto)
+    .replace(/\.\.\./g, " [pause] ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Si el usuario pegó un guion propio que ya empieza con su propia etiqueta actoral [...], la respetamos
+  if (/^\[[a-zA-Z\s,]+\]/.test(limpio)) {
+    return limpio;
+  }
+
   let direccionActoral = "[serious, deep captivating documentary narrator]";
 
-  if (rol === "testigo") {
+  if (formatoActivo === "espiritual") {
+    direccionActoral = "[warm, reverent, peaceful and deeply comforting spiritual voice]";
+  } else if (formatoActivo === "infantil") {
+    direccionActoral = "[warm, cheerful, playful and magical storyteller voice for children]";
+  } else if (rol === "testigo") {
     direccionActoral = "[emotional, weary survivor reading a historical diary, intimate tone]";
   } else if (rol === "archivo") {
     direccionActoral = "[cold, clinical forensic investigator reading a classified file]";
@@ -350,16 +392,12 @@ function construirTextoDrama3(texto, tono = "serio", rol = "narrador", formatoAc
     direccionActoral = "[somber, slow, deep reflective tone]";
   }
 
-  const textoFormateado = String(texto)
-    .replace(/\.\.\./g, " [pause] ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return `${direccionActoral} ${textoFormateado}`;
+  return `${direccionActoral} ${limpio}`;
 }
 
-async function generarVozFishDrama3(texto, tono, rol, formatoActivo, outputPath) {
-  if (!FISH_API_KEY || !FISH_VOICE_ID) {
+export async function generarVozFishDrama3(texto, tono, rol, formatoActivo, outputPath, voiceOverride = "") {
+  const idVozActiva = voiceOverride || FISH_VOICE_ID;
+  if (!FISH_API_KEY || !idVozActiva) {
     return false;
   }
 
@@ -376,7 +414,7 @@ async function generarVozFishDrama3(texto, tono, rol, formatoActivo, outputPath)
         },
         body: JSON.stringify({
           text: textoActoral,
-          reference_id: FISH_VOICE_ID,
+          reference_id: idVozActiva,
           format: "mp3",
           mp3_bitrate: 192,
           normalize: true,
@@ -387,7 +425,7 @@ async function generarVozFishDrama3(texto, tono, rol, formatoActivo, outputPath)
         const buffer = Buffer.from(await res.arrayBuffer());
         if (buffer.length > 1000) {
           fs.writeFileSync(outputPath, buffer);
-          console.log(`   🎭 Voz generada con Fish Audio Drama-3 (ID: ${FISH_VOICE_ID.slice(0, 8)}...)`);
+          console.log(`   🎭 Voz generada con Fish Audio Drama-3 (ID: ${idVozActiva.slice(0, 8)}...)`);
           return true;
         }
       } else {
@@ -418,7 +456,7 @@ function escaparXml(texto) {
     .replace(/'/g, "&apos;");
 }
 
-async function generarVozAzure(texto, tono = "serio", rol = "narrador", formatoActivo = "documental", outputPath) {
+export async function generarVozAzure(texto, tono = "serio", rol = "narrador", formatoActivo = "documental", outputPath) {
   const url = `https://${AZURE_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`;
   const infoVoz = VOCES_DOCUMENTAL[rol] || VOCES_DOCUMENTAL.narrador;
 
@@ -432,7 +470,11 @@ async function generarVozAzure(texto, tono = "serio", rol = "narrador", formatoA
   let cfg = { ...(configuracionTono[tono] || configuracionTono.serio) };
 
   if (rol === "narrador") {
-    if (formatoActivo === "noticia" && (tono === "serio" || tono === "impacto")) {
+    if (formatoActivo === "espiritual") {
+      cfg = { style: "empathetic", styledegree: "1.35", rate: "-4%", pitch: "-4%" };
+    } else if (formatoActivo === "infantil") {
+      cfg = { style: "cheerful", styledegree: "1.35", rate: "+2%", pitch: "+2%" };
+    } else if (formatoActivo === "noticia" && (tono === "serio" || tono === "impacto")) {
       cfg = { style: "newscast-formal", styledegree: "1.35", rate: "+6%", pitch: "-3%" };
     } else if (formatoActivo === "top_datos") {
       cfg.rate = "+6%";
@@ -489,7 +531,7 @@ async function generarVozAzure(texto, tono = "serio", rol = "narrador", formatoA
 // ==========================================
 // 4. ENVÍO AUTOMÁTICO DEL REEL A TU TELEGRAM (BLINDADO)
 // ==========================================
-async function enviarVideoTelegram(videoPath, tema, formatoActivo) {
+export async function enviarVideoTelegram(videoPath, tema, formatoActivo) {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
     console.warn("⚠️ TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID no están configurados en Secrets.");
     return;
@@ -503,7 +545,6 @@ async function enviarVideoTelegram(videoPath, tema, formatoActivo) {
   let archivoAEnviar = videoPath;
   let sizeMB = fs.statSync(archivoAEnviar).size / (1024 * 1024);
 
-  // Escudo contra el límite de 50 MB de los bots de Telegram
   if (sizeMB > 48) {
     console.log(`⚠️ El video pesa ${sizeMB.toFixed(2)} MB (>48 MB). Optimizando copia para Telegram...`);
     const comprimidoPath = "out/reel_telegram.mp4";
@@ -572,7 +613,7 @@ async function main() {
   console.log(`🎭 Formato activo: ${formatoActivo.toUpperCase()}`);
   console.log(`🎙️ Motor de voz seleccionado: ${MOTOR_VOZ.toUpperCase()}\n`);
 
-  const listaEscenas = await generarGuionAutomatico(TEMA, formatoActivo);
+  const listaEscenas = await generarGuionAutomatico(TEMA, formatoActivo, GUION_PROPIO);
   const processedScenes = [];
 
   for (let i = 0; i < listaEscenas.length; i++) {
@@ -608,6 +649,8 @@ async function main() {
       format: formatoActivo,
       role: rolEscena,
       tone: tonoEscena,
+      text: scene.text,
+      imagePrompt: scene.imagePrompt,
       image: nombreImagen,
       audioFile: `audio_scene_${i + 1}.mp3`,
       durationInFrames: totalFrames,
@@ -615,6 +658,14 @@ async function main() {
   }
 
   fs.writeFileSync("./guion_sincronizado.json", JSON.stringify({ scenes: processedScenes }, null, 2));
+
+  if (!fs.existsSync("out")) {
+    fs.mkdirSync("out", { recursive: true });
+  }
+  if (fs.existsSync("public/ia_escena_1.jpg")) {
+    fs.copyFileSync("public/ia_escena_1.jpg", "out/portada_reel.jpg");
+    console.log("🖼️ Portada 9:16 guardada en out/portada_reel.jpg");
+  }
 
   const outputVideo = "out/reel_azure_premium.mp4";
   console.log("\n🎬 Renderizando con Remotion en modo Turbo Multi-Núcleo (100%, CRF 23)...");
@@ -624,7 +675,9 @@ async function main() {
   await enviarVideoTelegram(outputVideo, TEMA, formatoActivo);
 }
 
-main().catch((err) => {
-  console.error("❌ Fallo en la ejecución:", err);
-  process.exit(1);
-});
+if (import.meta.url === `file://${process.argv[1].replace(/\\/g, "/")}` || process.argv[1]?.endsWith("crear-video-ia.mjs")) {
+  main().catch((err) => {
+    console.error("❌ Fallo en la ejecución:", err);
+    process.exit(1);
+  });
+}
