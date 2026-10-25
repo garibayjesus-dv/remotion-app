@@ -161,7 +161,7 @@ Reglas técnicas obligatorias:
 - "role" solo puede ser: "narrador", "testigo" o "archivo".
 - "tone" solo puede ser: "intriga", "serio", "impacto" o "reflexion".
 - En "text": Escribe todos los números con letras. Puedes usar <stress>palabra</stress> para dar énfasis vocal a una palabra clave y puntos suspensivos (...) donde quieras una pausa dramática.
-- En "imagePrompt": Escribe un prompt en inglés para FLUX.2-pro con UN sujeto u objeto centrado. REGLA DE SEGURIDAD AZURE: NUNCA uses palabras gráficas, violencia, cadáveres ni sangre (prohibido: blood, corpse, dead, cannibalism, bones, skull, gore, kill, weapon, torture). Usa metáforas visuales atmosféricas y seguras.
+- En "imagePrompt": Escribe un prompt en inglés con UN sujeto u objeto centrado. REGLA DE SEGURIDAD: NUNCA uses palabras gráficas, violencia, cadáveres ni sangre (prohibido: blood, corpse, dead, cannibalism, bones, skull, gore, kill, weapon, torture). Usa metáforas visuales atmosféricas y seguras.
 - REGLA DE LOOP INFINITO VIRAL: El final de la Escena ${cfg.numEscenas} y el inicio de la Escena 1 deben formar UNA SOLA ORACIÓN CONTINUA cuando el video se repita en bucle (la última escena termina en frase abierta sin punto final y la primera escena la completa como gancho).`;
 
   if (GEMINI_API_KEY) {
@@ -245,12 +245,47 @@ Reglas técnicas obligatorias:
 }
 
 // ==========================================
-// 2. GENERADOR DE IMÁGENES PRINCIPAL: AZURE FLUX.2-PRO VERTICAL (768x1344)
+// 2. GENERADOR DE IMÁGENES:
+//    1º CLOUDFLARE GRATIS (Cuenta 1 -> Cuenta 2)
+//    2º RESPALDO AUTOMÁTICO: AZURE FLUX.2-PRO (768x1344)
 // ==========================================
 async function generarImagenIA(prompt, outputPath, numeroEscena, formatoActivo) {
   const cfg = CONFIG_FORMATOS[formatoActivo] || CONFIG_FORMATOS.documental;
   const promptFinal = `${prompt}, ${cfg.estiloVisualFlux}, masterpiece, photorealistic, vertical 9:16 composition, sharp focus, 8k, no text, no watermark, natural anatomy`;
 
+  // PASO 1: Intentar primero con tus cuentas gratuitas de Cloudflare (Cuenta 1 -> Cuenta 2)
+  while (indiceCuentaActual < CUENTAS_CF.length) {
+    const cuenta = CUENTAS_CF[indiceCuentaActual];
+    try {
+      const response = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${cuenta.id}/ai/run/@cf/black-forest-labs/flux-1-schnell`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${cuenta.token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ prompt: promptFinal, steps: 8 }),
+        }
+      );
+
+      const data = await response.json();
+      if (response.ok && data.success && data.result?.image) {
+        fs.writeFileSync(outputPath, Buffer.from(data.result.image, "base64"));
+        console.log(`   🖼️ Imagen generada gratis con Cloudflare (${cuenta.nombre})`);
+        return;
+      } else {
+        const motivo = data?.errors?.[0]?.message || response.status;
+        console.warn(`   ⚠️ Cloudflare ${cuenta.nombre} sin créditos o límite alcanzado (${motivo}). Pasando al siguiente respaldo...`);
+        indiceCuentaActual++;
+      }
+    } catch (err) {
+      console.warn(`   ⚠️ Error en Cloudflare ${cuenta.nombre} (${err.message}). Pasando al siguiente respaldo...`);
+      indiceCuentaActual++;
+    }
+  }
+
+  // PASO 2: Si ambas cuentas de Cloudflare agotaron sus créditos hoy, entra Azure FLUX.2-pro automáticamente
   if (AZURE_FOUNDRY_KEY) {
     for (let intento = 1; intento <= 3; intento++) {
       const promptSeguro =
@@ -277,7 +312,7 @@ async function generarImagenIA(prompt, outputPath, numeroEscena, formatoActivo) 
         const dataAz = await resAz.json();
         if (resAz.ok && dataAz?.data?.[0]?.b64_json) {
           fs.writeFileSync(outputPath, Buffer.from(dataAz.data[0].b64_json, "base64"));
-          console.log(`   🖼️ Imagen vertical 9:16 generada con Azure FLUX.2-pro`);
+          console.log(`   🖼️ Imagen vertical 9:16 generada con respaldo Azure FLUX.2-pro`);
           return;
         } else {
           console.warn(`   ⚠️ Aviso Azure FLUX.2-pro (intento ${intento}/3): ${dataAz?.error?.message || resAz.status}`);
@@ -287,33 +322,6 @@ async function generarImagenIA(prompt, outputPath, numeroEscena, formatoActivo) 
         console.warn(`   ⚠️ Error de red Azure FLUX.2-pro (intento ${intento}/3): ${err.message}`);
         await esperar(2000 * intento);
       }
-    }
-  }
-
-  while (indiceCuentaActual < CUENTAS_CF.length) {
-    const cuenta = CUENTAS_CF[indiceCuentaActual];
-    try {
-      const response = await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${cuenta.id}/ai/run/@cf/black-forest-labs/flux-1-schnell`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${cuenta.token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ prompt: promptFinal, steps: 8 }),
-        }
-      );
-
-      const data = await response.json();
-      if (data.success && data.result?.image) {
-        fs.writeFileSync(outputPath, Buffer.from(data.result.image, "base64"));
-        console.log(`   🖼️ Imagen generada con respaldo ${cuenta.nombre}`);
-        return;
-      }
-      indiceCuentaActual++;
-    } catch (err) {
-      indiceCuentaActual++;
     }
   }
 
