@@ -1,5 +1,5 @@
 import fs from "fs";
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import getMP3Duration from "get-mp3-duration";
 import "dotenv/config";
 
@@ -12,12 +12,14 @@ const AZURE_FOUNDRY_KEY = process.env.AZURE_FOUNDRY_KEY;
 const AZURE_KEY = process.env.AZURE_SPEECH_KEY;
 const AZURE_REGION = process.env.AZURE_SPEECH_REGION;
 
+const TELEGRAM_BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || "").replace(/["']/g, "").trim();
+const TELEGRAM_CHAT_ID = (process.env.TELEGRAM_CHAT_ID || "").replace(/["']/g, "").trim();
+
 const FISH_API_KEY = (process.env.FISH_API_KEY || "").replace(/["']/g, "").trim();
 const RAW_FISH_VOICE = (process.env.FISH_VOICE_OVERRIDE || process.env.FISH_VOICE_ID || "")
   .replace(/["']/g, "")
   .trim();
 
-// Extrae automáticamente el ID limpio aunque el usuario pegue la URL completa de Fish Audio
 const FISH_VOICE_ID = RAW_FISH_VOICE.includes("/m/")
   ? RAW_FISH_VOICE.split("/m/")[1].split("/")[0].split("?")[0]
   : RAW_FISH_VOICE;
@@ -348,7 +350,6 @@ function construirTextoDrama3(texto, tono = "serio", rol = "narrador", formatoAc
     direccionActoral = "[somber, slow, deep reflective tone]";
   }
 
-  // Convertimos los puntos suspensivos (...) en el comando nativo [pause] de Drama-3
   const textoFormateado = String(texto)
     .replace(/\.\.\./g, " [pause] ")
     .replace(/\s+/g, " ")
@@ -408,7 +409,6 @@ async function generarVozFishDrama3(texto, tono, rol, formatoActivo, outputPath)
 // ==========================================
 function escaparXml(texto) {
   return String(texto)
-    // Limpiamos etiquetas exclusivas de Drama-3 si entra Azure como respaldo
     .replace(/<\/?(stress|whisper)>/gi, "")
     .replace(/\[.*?\]/g, "")
     .replace(/&/g, "&amp;")
@@ -487,7 +487,82 @@ async function generarVozAzure(texto, tono = "serio", rol = "narrador", formatoA
 }
 
 // ==========================================
-// 4. FLUJO PRINCIPAL
+// 4. ENVÍO AUTOMÁTICO DEL REEL A TU TELEGRAM (BLINDADO)
+// ==========================================
+async function enviarVideoTelegram(videoPath, tema, formatoActivo) {
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+    console.warn("⚠️ TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID no están configurados en Secrets.");
+    return;
+  }
+
+  if (!fs.existsSync(videoPath)) {
+    console.error(`❌ No se encontró el archivo de video en ${videoPath}.`);
+    return;
+  }
+
+  let archivoAEnviar = videoPath;
+  let sizeMB = fs.statSync(archivoAEnviar).size / (1024 * 1024);
+
+  // Escudo contra el límite de 50 MB de los bots de Telegram
+  if (sizeMB > 48) {
+    console.log(`⚠️ El video pesa ${sizeMB.toFixed(2)} MB (>48 MB). Optimizando copia para Telegram...`);
+    const comprimidoPath = "out/reel_telegram.mp4";
+    try {
+      execSync(
+        `npx remotion ffmpeg -y -i "${videoPath}" -vcodec libx264 -crf 28 -preset fast -acodec copy "${comprimidoPath}"`,
+        { stdio: "ignore" }
+      );
+      if (fs.existsSync(comprimidoPath)) {
+        archivoAEnviar = comprimidoPath;
+        sizeMB = fs.statSync(archivoAEnviar).size / (1024 * 1024);
+      }
+    } catch (e) {
+      console.warn("⚠️ No se pudo recomprimir, intentando enviar archivo original...");
+    }
+  }
+
+  console.log(`\n📲 Enviando video (${sizeMB.toFixed(2)} MB) a tu Telegram...`);
+
+  const captionTexto = `🎬 ¡Reel listo para publicar!\n📌 Tema: ${tema}\n🎭 Formato: ${formatoActivo.toUpperCase()}`;
+
+  try {
+    const resultado = spawnSync(
+      "curl",
+      [
+        "-s",
+        "-X",
+        "POST",
+        `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendVideo`,
+        "-F",
+        `chat_id=${TELEGRAM_CHAT_ID}`,
+        "-F",
+        `video=@${archivoAEnviar}`,
+        "-F",
+        "supports_streaming=true",
+        "--form-string",
+        `caption=${captionTexto}`,
+      ],
+      { encoding: "utf8", maxBuffer: 10 * 1024 * 1024 }
+    );
+
+    if (resultado.error) {
+      throw resultado.error;
+    }
+
+    const salida = (resultado.stdout || "").trim();
+    const json = JSON.parse(salida);
+    if (json.ok) {
+      console.log("✅ ¡Video enviado exitosamente a tu celular por Telegram!");
+    } else {
+      console.error("❌ Telegram rechazó el envío:", json.description || salida);
+    }
+  } catch (err) {
+    console.error("❌ Error al enviar a Telegram:", err.message);
+  }
+}
+
+// ==========================================
+// 5. FLUJO PRINCIPAL
 // ==========================================
 async function main() {
   const formatoActivo = resolverFormato(TEMA, FORMATO_INPUT);
@@ -541,9 +616,12 @@ async function main() {
 
   fs.writeFileSync("./guion_sincronizado.json", JSON.stringify({ scenes: processedScenes }, null, 2));
 
-  console.log("\n🎬 Renderizando con Remotion en modo Turbo Multi-Núcleo (100%)...");
-  execSync(`npx remotion render LongReel out/reel_azure_premium.mp4 --concurrency=100% --crf=23`, { stdio: "inherit" });
+  const outputVideo = "out/reel_azure_premium.mp4";
+  console.log("\n🎬 Renderizando con Remotion en modo Turbo Multi-Núcleo (100%, CRF 23)...");
+  execSync(`npx remotion render LongReel ${outputVideo} --concurrency=100% --crf=23`, { stdio: "inherit" });
   console.log("\n🎉 ¡Reel completado con éxito!");
+
+  await enviarVideoTelegram(outputVideo, TEMA, formatoActivo);
 }
 
 main().catch((err) => {
